@@ -46,6 +46,9 @@ from apps.deforestation.viewsets import (
     DeforestationAlertViewSet,
 )
 
+from apps.weather.viewsets import WeatherStationViewSet, TemperatureObservationViewSet
+from apps.storms.viewsets import StormEventViewSet, ActiveAlertViewSet
+
 api_v1_router = DefaultRouter()
 api_v1_router.register(r"geodata/states", StateViewSet, basename="state")
 api_v1_router.register(r"geodata/counties", CountyViewSet, basename="county")
@@ -56,6 +59,12 @@ api_v1_router.register(r"deforestation/loss", TreeCoverLossViewSet, basename="tr
 api_v1_router.register(
     r"deforestation/alerts", DeforestationAlertViewSet, basename="deforestationalert"
 )
+api_v1_router.register(r"weather/stations", WeatherStationViewSet, basename="weatherstation")
+api_v1_router.register(
+    r"weather/observations", TemperatureObservationViewSet, basename="temperatureobservation"
+)
+api_v1_router.register(r"storms/events", StormEventViewSet, basename="stormevent")
+api_v1_router.register(r"storms/alerts", ActiveAlertViewSet, basename="activealert")
 
 urlpatterns += [
     path("api/v1/", include(api_v1_router.urls)),
