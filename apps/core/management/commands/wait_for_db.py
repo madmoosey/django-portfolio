@@ -44,20 +44,14 @@ class Command(BaseCommand):
 
             if elapsed >= timeout:
                 self.stderr.write(
-                    self.style.ERROR(
-                        f"Database not available after {timeout} seconds. Aborting."
-                    )
+                    self.style.ERROR(f"Database not available after {timeout} seconds. Aborting.")
                 )
                 raise SystemExit(1)
 
             try:
                 db_conn = connections["default"]
                 db_conn.ensure_connection()
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Database available! (took {elapsed:.1f}s)"
-                    )
-                )
+                self.stdout.write(self.style.SUCCESS(f"Database available! (took {elapsed:.1f}s)"))
                 return
             except OperationalError:
                 self.stdout.write(

@@ -24,6 +24,15 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Load task modules from all registered Django apps.
 app.autodiscover_tasks()
 
+from celery.schedules import crontab
+
+app.conf.beat_schedule = {
+    "ingest-tree-cover-loss-weekly": {
+        "task": "apps.ingest.tasks.deforestation_tasks.ingest_tree_cover_loss",
+        "schedule": crontab(day_of_week="sun", hour=2, minute=0),
+    },
+}
+
 
 @setup_logging.connect
 def config_loggers(*args, **kwargs):

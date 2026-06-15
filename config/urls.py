@@ -40,10 +40,22 @@ urlpatterns = [
 # API v1 Router
 from rest_framework.routers import DefaultRouter
 from apps.geodata.viewsets import StateViewSet, CountyViewSet
+from apps.deforestation.viewsets import (
+    TreeCoverBaselineViewSet,
+    TreeCoverLossViewSet,
+    DeforestationAlertViewSet,
+)
 
 api_v1_router = DefaultRouter()
 api_v1_router.register(r"geodata/states", StateViewSet, basename="state")
 api_v1_router.register(r"geodata/counties", CountyViewSet, basename="county")
+api_v1_router.register(
+    r"deforestation/baselines", TreeCoverBaselineViewSet, basename="treecoverbaseline"
+)
+api_v1_router.register(r"deforestation/loss", TreeCoverLossViewSet, basename="treecoverloss")
+api_v1_router.register(
+    r"deforestation/alerts", DeforestationAlertViewSet, basename="deforestationalert"
+)
 
 urlpatterns += [
     path("api/v1/", include(api_v1_router.urls)),

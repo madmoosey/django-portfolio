@@ -60,7 +60,7 @@ class Command(BaseCommand):
 
         # Work in a temporary directory
         temp_dir = Path(tempfile.mkdtemp())
-        
+
         try:
             self.seed_states(temp_dir)
             self.seed_counties(temp_dir)
@@ -91,7 +91,9 @@ class Command(BaseCommand):
             transaction_mode="autocommit",
         )
         lm.save(strict=True, verbose=False)
-        self.stdout.write(self.style.SUCCESS(f"Ingested {State.objects.count()} states/territories."))
+        self.stdout.write(
+            self.style.SUCCESS(f"Ingested {State.objects.count()} states/territories.")
+        )
 
     @transaction.atomic
     def seed_counties(self, temp_dir: Path):
@@ -122,10 +124,11 @@ class Command(BaseCommand):
             name = feat.get("NAME")
             aland = feat.get("ALAND")  # Area land in square meters
             geom = feat.geom.geos
-            
+
             # Ensure geometry is a MultiPolygon
             if geom.geom_type == "Polygon":
                 from django.contrib.gis.geos import MultiPolygon
+
                 geom = MultiPolygon(geom)
 
             try:
@@ -137,7 +140,7 @@ class Command(BaseCommand):
                         "state": state,
                         "area_sq_km": aland,
                         "geometry": geom,
-                    }
+                    },
                 )
                 count += 1
                 if count % 500 == 0:
@@ -152,11 +155,11 @@ class Command(BaseCommand):
     def fix_areas(self):
         """Convert ALAND from square meters to square kilometers."""
         self.stdout.write("Converting land area from sq meters to sq km...")
-        
+
         # In the Census files, ALAND is in square meters. We'll divide by 1,000,000.
         from django.db.models import F
-        
-        State.objects.update(area_sq_km=F('area_sq_km') / 1000000)
-        County.objects.update(area_sq_km=F('area_sq_km') / 1000000)
-        
+
+        State.objects.update(area_sq_km=F("area_sq_km") / 1000000)
+        County.objects.update(area_sq_km=F("area_sq_km") / 1000000)
+
         self.stdout.write(self.style.SUCCESS("Area conversion complete."))
