@@ -1,3 +1,11 @@
 from django.contrib import admin
+from .models import WeatherStation, TemperatureObservation
 
-# Register your models here.
+@admin.register(WeatherStation)
+class WeatherStationAdmin(admin.ModelAdmin):
+    pass
+
+@admin.register(TemperatureObservation)
+class TemperatureObservationAdmin(admin.ModelAdmin):
+    pass
+
