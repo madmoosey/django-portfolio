@@ -1,11 +1,12 @@
 from rest_framework import viewsets
-from .models import TreeCoverBaseline, TreeCoverLoss, DeforestationAlert
+
+from .filters import DeforestationAlertFilter, TreeCoverLossFilter
+from .models import DeforestationAlert, TreeCoverBaseline, TreeCoverLoss
 from .serializers import (
+    DeforestationAlertSerializer,
     TreeCoverBaselineSerializer,
     TreeCoverLossSerializer,
-    DeforestationAlertSerializer,
 )
-from .filters import TreeCoverLossFilter, DeforestationAlertFilter
 
 
 class TreeCoverBaselineViewSet(viewsets.ReadOnlyModelViewSet):

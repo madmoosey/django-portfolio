@@ -1,6 +1,7 @@
 from rest_framework import viewsets
-from .models import WeatherStation, TemperatureObservation
-from .serializers import WeatherStationSerializer, TemperatureObservationSerializer
+
+from .models import TemperatureObservation, WeatherStation
+from .serializers import TemperatureObservationSerializer, WeatherStationSerializer
 
 
 class WeatherStationViewSet(viewsets.ReadOnlyModelViewSet):

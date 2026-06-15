@@ -1,9 +1,12 @@
 import logging
 from datetime import datetime, timedelta
-from celery import shared_task
+
 from django.db import transaction
-from apps.weather.models import WeatherStation, TemperatureObservation
+
+from celery import shared_task
+
 from apps.ingest.clients.noaa_client import NOAAClient
+from apps.weather.models import TemperatureObservation, WeatherStation
 
 logger = logging.getLogger(__name__)
 

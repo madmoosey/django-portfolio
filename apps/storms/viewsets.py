@@ -1,6 +1,7 @@
 from rest_framework import viewsets
-from .models import StormEvent, ActiveAlert
-from .serializers import StormEventSerializer, ActiveAlertSerializer
+
+from .models import ActiveAlert, StormEvent
+from .serializers import ActiveAlertSerializer, StormEventSerializer
 
 
 class StormEventViewSet(viewsets.ReadOnlyModelViewSet):

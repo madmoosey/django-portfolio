@@ -1,7 +1,9 @@
 import logging
+
 from celery import shared_task
-from apps.storms.models import ActiveAlert
+
 from apps.ingest.clients.noaa_client import NOAAClient
+from apps.storms.models import ActiveAlert
 
 logger = logging.getLogger(__name__)
 

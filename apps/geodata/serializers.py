@@ -4,8 +4,9 @@ ArborWatch Geodata Serializers.
 GeoJSON serializers for state and county models.
 """
 
-from rest_framework import serializers
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
+
+from rest_framework import serializers
 
 from apps.geodata.models import County, State
 

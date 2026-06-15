@@ -1,5 +1,7 @@
 import logging
+
 from django.conf import settings
+
 from .base import BaseClient
 
 logger = logging.getLogger(__name__)

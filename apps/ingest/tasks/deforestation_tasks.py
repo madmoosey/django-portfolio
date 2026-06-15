@@ -1,8 +1,11 @@
 import logging
-from celery import shared_task
+
 from django.db import transaction
-from apps.geodata.models import County
+
+from celery import shared_task
+
 from apps.deforestation.models import TreeCoverBaseline, TreeCoverLoss
+from apps.geodata.models import County
 from apps.ingest.clients.gfw_client import GFWClient
 
 logger = logging.getLogger(__name__)

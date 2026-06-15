@@ -1,6 +1,8 @@
-from rest_framework import serializers
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
-from .models import WeatherStation, TemperatureObservation
+
+from rest_framework import serializers
+
+from .models import TemperatureObservation, WeatherStation
 
 
 class TemperatureObservationSerializer(serializers.ModelSerializer):
