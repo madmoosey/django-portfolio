@@ -24,10 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements/ requirements/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --prefix=/install -r requirements/production.txt
+# Install Pipenv
+RUN pip install --no-cache-dir pipenv
+
+# Copy Pipfile and Pipfile.lock
+COPY Pipfile Pipfile.lock ./
+RUN PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy
 
 # ---------------------------------------------------------------------------
 # Stage 2: Runtime
@@ -53,8 +55,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN groupadd -r arborwatch && \
     useradd -r -g arborwatch -d /app -s /sbin/nologin arborwatch
 
-# Copy installed Python packages from builder
-COPY --from=builder /install /usr/local
+# Copy python virtualenv from builder (maintain exact path to preserve shebangs)
+COPY --from=builder /build/.venv /build/.venv
+ENV PATH="/build/.venv/bin:$PATH"
 
 # Copy application code
 COPY . .

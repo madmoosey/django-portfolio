@@ -5,6 +5,7 @@ Read-only endpoints returning GeoJSON data for geographic boundaries.
 """
 
 from rest_framework_gis.filters import InBBoxFilter
+from rest_framework_gis.pagination import GeoJsonPagination
 
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -28,6 +29,7 @@ class StateViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = StateFilter
     bbox_filter_field = "geometry"
     filter_backends = viewsets.ReadOnlyModelViewSet.filter_backends + [InBBoxFilter]
+    pagination_class = GeoJsonPagination
 
     # State boundaries rarely change, aggressively cache the list view for 24 hours
     @method_decorator(cache_page(60 * 60 * 24))
@@ -48,6 +50,7 @@ class CountyViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = CountyFilter
     bbox_filter_field = "geometry"
     filter_backends = viewsets.ReadOnlyModelViewSet.filter_backends + [InBBoxFilter]
+    pagination_class = GeoJsonPagination
 
     # County boundaries rarely change, aggressively cache the list view for 24 hours
     @method_decorator(cache_page(60 * 60 * 24))
