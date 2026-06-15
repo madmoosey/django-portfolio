@@ -27,9 +27,9 @@ app.autodiscover_tasks()
 from celery.schedules import crontab
 
 app.conf.beat_schedule = {
-    'ingest-tree-cover-loss-weekly': {
-        'task': 'apps.ingest.tasks.deforestation_tasks.ingest_tree_cover_loss',
-        'schedule': crontab(day_of_week='sun', hour=2, minute=0),
+    "ingest-tree-cover-loss-weekly": {
+        "task": "apps.ingest.tasks.deforestation_tasks.ingest_tree_cover_loss",
+        "schedule": crontab(day_of_week="sun", hour=2, minute=0),
     },
 }
 

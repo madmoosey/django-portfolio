@@ -17,7 +17,7 @@ from apps.geodata.serializers import CountySerializer, StateSerializer
 class StateViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows states to be viewed.
-    
+
     Returns standard GeoJSON `FeatureCollection`.
     Supports bounding box filtering via `?in_bbox=min_lon,min_lat,max_lon,max_lat`.
     """
@@ -27,7 +27,7 @@ class StateViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = StateFilter
     bbox_filter_field = "geometry"
     filter_backends = viewsets.ReadOnlyModelViewSet.filter_backends + [InBBoxFilter]
-    
+
     # State boundaries rarely change, aggressively cache the list view for 24 hours
     @method_decorator(cache_page(60 * 60 * 24))
     def list(self, request, *args, **kwargs):
@@ -37,7 +37,7 @@ class StateViewSet(viewsets.ReadOnlyModelViewSet):
 class CountyViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint that allows counties to be viewed.
-    
+
     Returns standard GeoJSON `FeatureCollection`.
     Supports bounding box filtering via `?in_bbox=min_lon,min_lat,max_lon,max_lat`.
     """

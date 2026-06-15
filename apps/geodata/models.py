@@ -10,23 +10,21 @@ from apps.core.models import BaseModel
 
 class State(BaseModel):
     """US state boundaries with PostGIS geometries."""
-    
+
     fips_code = models.CharField(
-        max_length=2, 
-        unique=True, 
+        max_length=2,
+        unique=True,
         db_index=True,
-        help_text="2-digit FIPS code (e.g. '06' for California)"
+        help_text="2-digit FIPS code (e.g. '06' for California)",
     )
     name = models.CharField(max_length=100)
     abbreviation = models.CharField(max_length=2)
-    
+
     # Using MultiPolygon instead of Polygon to support states like Hawaii with multiple islands
     geometry = models.MultiPolygonField(srid=4326)
-    
+
     area_sq_km = models.DecimalField(
-        max_digits=15, 
-        decimal_places=2,
-        help_text="Total area in square kilometers"
+        max_digits=15, decimal_places=2, help_text="Total area in square kilometers"
     )
     population = models.IntegerField(null=True, blank=True)
 
@@ -39,22 +37,20 @@ class State(BaseModel):
 
 class County(BaseModel):
     """US county boundaries with PostGIS geometries."""
-    
+
     fips_code = models.CharField(
-        max_length=5, 
-        unique=True, 
+        max_length=5,
+        unique=True,
         db_index=True,
-        help_text="5-digit FIPS code (State FIPS + County FIPS)"
+        help_text="5-digit FIPS code (State FIPS + County FIPS)",
     )
     name = models.CharField(max_length=100)
     state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="counties")
-    
+
     geometry = models.MultiPolygonField(srid=4326)
-    
+
     area_sq_km = models.DecimalField(
-        max_digits=15, 
-        decimal_places=2,
-        help_text="Total area in square kilometers"
+        max_digits=15, decimal_places=2, help_text="Total area in square kilometers"
     )
     population = models.IntegerField(null=True, blank=True)
 
