@@ -67,6 +67,12 @@ api_v1_router.register(
 api_v1_router.register(r"storms/events", StormEventViewSet, basename="stormevent")
 api_v1_router.register(r"storms/alerts", ActiveAlertViewSet, basename="activealert")
 
+from apps.analysis.viewsets import CountyRiskScoreViewSet, MLModelViewSet, RiskTrendViewSet
+
+api_v1_router.register(r"analysis/risk-scores", CountyRiskScoreViewSet, basename="countyriskscore")
+api_v1_router.register(r"analysis/trends", RiskTrendViewSet, basename="risktrend")
+api_v1_router.register(r"analysis/models", MLModelViewSet, basename="mlmodel")
+
 urlpatterns += [
     path("api/v1/", include(api_v1_router.urls)),
 ]
