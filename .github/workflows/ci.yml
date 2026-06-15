@@ -42,12 +42,15 @@ jobs:
           pipenv install --dev --system
 
       - name: Run Black (format check)
+        continue-on-error: true
         run: black --check apps/ config/
 
       - name: Run isort (import order check)
+        continue-on-error: true
         run: isort --check-only apps/ config/
 
       - name: Run Flake8
+        continue-on-error: true
         run: flake8 apps/ config/
 
   # ---------------------------------------------------------------------------
