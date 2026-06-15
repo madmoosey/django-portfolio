@@ -34,12 +34,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements/*.txt
+          cache-dependency-path: Pipfile.lock
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/local.txt
+          python -m pip install --upgrade pip pipenv
+          pipenv install --dev --system
 
       - name: Run Black (format check)
         run: black --check apps/ config/
@@ -107,12 +107,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements/*.txt
+          cache-dependency-path: Pipfile.lock
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/local.txt
+          python -m pip install --upgrade pip pipenv
+          pipenv install --dev --system
 
       - name: Run tests
         run: |
