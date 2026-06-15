@@ -70,6 +70,7 @@ LOCAL_APPS = [
     "apps.ingest",
     "apps.weather",
     "apps.storms",
+    "apps.analysis",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

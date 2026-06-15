@@ -39,6 +39,14 @@ app.conf.beat_schedule = {
         "task": "apps.ingest.tasks.storm_tasks.ingest_active_alerts",
         "schedule": crontab(minute="*/15"),
     },
+    "build-feature-matrix-weekly": {
+        "task": "apps.ingest.tasks.analysis_tasks.build_feature_matrix",
+        "schedule": crontab(day_of_week="sun", hour=4, minute=0),
+    },
+    "predict-risk-scores-weekly": {
+        "task": "apps.ingest.tasks.analysis_tasks.predict_county_risk_scores",
+        "schedule": crontab(day_of_week="sun", hour=6, minute=0),
+    },
 }
 
 
