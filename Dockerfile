@@ -55,9 +55,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN groupadd -r arborwatch && \
     useradd -r -g arborwatch -d /app -s /sbin/nologin arborwatch
 
-# Copy python virtualenv from builder
-COPY --from=builder /build/.venv /venv
-ENV PATH="/venv/bin:$PATH"
+# Copy python virtualenv from builder (maintain exact path to preserve shebangs)
+COPY --from=builder /build/.venv /build/.venv
+ENV PATH="/build/.venv/bin:$PATH"
 
 # Copy application code
 COPY . .
