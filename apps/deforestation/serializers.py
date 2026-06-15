@@ -1,6 +1,8 @@
-from rest_framework import serializers
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
-from .models import TreeCoverBaseline, TreeCoverLoss, DeforestationAlert
+
+from rest_framework import serializers
+
+from .models import DeforestationAlert, TreeCoverBaseline, TreeCoverLoss
 
 
 class TreeCoverBaselineSerializer(serializers.ModelSerializer):

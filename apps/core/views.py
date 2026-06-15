@@ -7,11 +7,12 @@ Health check endpoint for load balancer and monitoring.
 import logging
 import time
 
+from redis import Redis
+
 from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
 from django.views import View
-from redis import Redis
 
 logger = logging.getLogger(__name__)
 

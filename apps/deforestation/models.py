@@ -1,4 +1,5 @@
 from django.contrib.gis.db import models
+
 from apps.core.models import BaseModel
 from apps.geodata.models import County
 

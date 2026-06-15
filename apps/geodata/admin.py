@@ -1,7 +1,8 @@
 """ArborWatch Geodata Admin Configuration."""
 
 from django.contrib.gis import admin
-from .models import State, County
+
+from .models import County, State
 
 
 @admin.register(State)

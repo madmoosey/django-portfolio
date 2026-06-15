@@ -31,6 +31,14 @@ app.conf.beat_schedule = {
         "task": "apps.ingest.tasks.deforestation_tasks.ingest_tree_cover_loss",
         "schedule": crontab(day_of_week="sun", hour=2, minute=0),
     },
+    "ingest-weather-daily": {
+        "task": "apps.ingest.tasks.weather_tasks.ingest_temperature_observations",
+        "schedule": crontab(hour=4, minute=0),
+    },
+    "ingest-active-alerts-15m": {
+        "task": "apps.ingest.tasks.storm_tasks.ingest_active_alerts",
+        "schedule": crontab(minute="*/15"),
+    },
 }
 
 

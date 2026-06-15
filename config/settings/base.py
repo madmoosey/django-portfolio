@@ -68,6 +68,8 @@ LOCAL_APPS = [
     "apps.geodata",
     "apps.deforestation",
     "apps.ingest",
+    "apps.weather",
+    "apps.storms",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

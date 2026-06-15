@@ -6,15 +6,16 @@ Admin interface at /admin/.
 API documentation at /api/docs/ and /api/redoc/.
 """
 
-from django.conf import settings
-from django.conf.urls.static import static
-from django.contrib import admin
-from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
 
 from apps.core.views import HealthCheckView
 
@@ -39,12 +40,15 @@ urlpatterns = [
 
 # API v1 Router
 from rest_framework.routers import DefaultRouter
-from apps.geodata.viewsets import StateViewSet, CountyViewSet
+
 from apps.deforestation.viewsets import (
+    DeforestationAlertViewSet,
     TreeCoverBaselineViewSet,
     TreeCoverLossViewSet,
-    DeforestationAlertViewSet,
 )
+from apps.geodata.viewsets import CountyViewSet, StateViewSet
+from apps.storms.viewsets import ActiveAlertViewSet, StormEventViewSet
+from apps.weather.viewsets import TemperatureObservationViewSet, WeatherStationViewSet
 
 api_v1_router = DefaultRouter()
 api_v1_router.register(r"geodata/states", StateViewSet, basename="state")
@@ -56,6 +60,12 @@ api_v1_router.register(r"deforestation/loss", TreeCoverLossViewSet, basename="tr
 api_v1_router.register(
     r"deforestation/alerts", DeforestationAlertViewSet, basename="deforestationalert"
 )
+api_v1_router.register(r"weather/stations", WeatherStationViewSet, basename="weatherstation")
+api_v1_router.register(
+    r"weather/observations", TemperatureObservationViewSet, basename="temperatureobservation"
+)
+api_v1_router.register(r"storms/events", StormEventViewSet, basename="stormevent")
+api_v1_router.register(r"storms/alerts", ActiveAlertViewSet, basename="activealert")
 
 urlpatterns += [
     path("api/v1/", include(api_v1_router.urls)),
