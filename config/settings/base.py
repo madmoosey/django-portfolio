@@ -58,6 +58,7 @@ THIRD_PARTY_APPS = [
     "rest_framework_gis",
     "django_filters",
     "corsheaders",
+    "django_extensions",
     "drf_spectacular",
     "django_celery_beat",
     "django_celery_results",
@@ -231,7 +232,7 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
-    default="http://localhost:3000,http://localhost:8000",
+    default="http://localhost:3000,http://localhost:8000,http://localhost:5173,http://localhost:5174,https://arborwatch.net",
     cast=Csv(),
 )
 
