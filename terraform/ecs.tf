@@ -27,6 +27,7 @@ locals {
     { name = "DJANGO_SETTINGS_MODULE", value = "config.settings.production" },
     { name = "DJANGO_SECRET_KEY", value = var.django_secret_key },
     { name = "DJANGO_ALLOWED_HOSTS", value = "api.${var.domain_name},${var.domain_name},${aws_lb.main.dns_name},localhost,127.0.0.1" },
+    { name = "CORS_ALLOWED_ORIGINS", value = "https://${var.domain_name}" },
     { name = "POSTGRES_DB", value = "arborwatch" },
     { name = "POSTGRES_USER", value = "arborwatch" },
     { name = "POSTGRES_PASSWORD", value = var.db_password },
