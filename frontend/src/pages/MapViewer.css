@@ -1,0 +1,38 @@
+.map-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  height: calc(100vh - 120px);
+}
+
+.map-card {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--border-radius-lg);
+}
+
+.leaflet-map-container {
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-secondary);
+  border-radius: inherit;
+  z-index: 10;
+}
+
+/* Customizing Leaflet Dark Theme */
+.leaflet-container {
+  font-family: var(--font-family) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-light);
+}
+
+.leaflet-popup-tip {
+  background: var(--bg-input) !important;
+}

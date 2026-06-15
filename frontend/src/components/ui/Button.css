@@ -1,0 +1,47 @@
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  font-family: var(--font-family);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.variant-primary {
+  background: var(--primary);
+  color: var(--bg-primary);
+  box-shadow: 0 4px 10px var(--primary-glow);
+}
+
+.variant-primary:hover {
+  background: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px var(--primary-glow);
+}
+
+.variant-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.variant-outline:hover {
+  background: rgba(46, 204, 113, 0.1);
+  box-shadow: 0 0 15px rgba(46, 204, 113, 0.2);
+}
+
+.variant-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.variant-ghost:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
