@@ -222,3 +222,4 @@ __marimo__/
 *.tfstate.*
 .terraform.lock.hcl
 /frontend/.vite
+.python_history
