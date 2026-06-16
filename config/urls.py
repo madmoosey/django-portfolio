@@ -14,6 +14,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from apps.air_quality.viewsets import AirQualityObservationViewSet
 from apps.analysis.viewsets import CountyRiskScoreViewSet, MLModelViewSet, RiskTrendViewSet
 from apps.core.views import HealthCheckView
 from apps.deforestation.viewsets import (
@@ -64,6 +65,11 @@ api_v1_router.register(r"storms/alerts", ActiveAlertViewSet, basename="activeale
 api_v1_router.register(r"analysis/risk-scores", CountyRiskScoreViewSet, basename="countyriskscore")
 api_v1_router.register(r"analysis/trends", RiskTrendViewSet, basename="risktrend")
 api_v1_router.register(r"analysis/models", MLModelViewSet, basename="mlmodel")
+api_v1_router.register(
+    r"air-quality/observations",
+    AirQualityObservationViewSet,
+    basename="airqualityobservation",
+)
 
 urlpatterns += [
     path("api/v1/", include(api_v1_router.urls)),

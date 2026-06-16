@@ -72,6 +72,7 @@ LOCAL_APPS = [
     "apps.weather",
     "apps.storms",
     "apps.analysis",
+    "apps.air_quality",
     "apps.api",
 ]
 
@@ -281,6 +282,7 @@ CELERY_TASK_ROUTES = {
     "apps.ingest.tasks.weather_tasks.*": {"queue": "weather"},
     "apps.ingest.tasks.storm_tasks.*": {"queue": "weather"},
     "apps.ingest.tasks.analysis_tasks.*": {"queue": "analysis"},
+    "apps.ingest.tasks.air_quality_tasks.*": {"queue": "weather"},
 }
 
 CELERY_TASK_DEFAULT_QUEUE = "default"
@@ -363,3 +365,13 @@ NOAA_NCEI_BASE_URL = "https://www.ncei.noaa.gov/access/services/data/v1"
 # National Weather Service (no key required)
 NWS_API_BASE_URL = "https://api.weather.gov"
 NWS_USER_AGENT = config("NWS_USER_AGENT", default="ArborWatch/1.0 (arborwatch.net)")
+
+# EPA AirNow — real-time US Air Quality Index
+# Signup: https://docs.airnowapi.org/account/request
+AIRNOW_API_KEY = config("AIRNOW_API_KEY", default="")
+AIRNOW_BASE_URL = "https://www.airnowapi.org"
+
+# NOAA CDO Web Services — station metadata, dataset listings, location info.
+# Distinct from NOAA_NCEI_BASE_URL which is the data-download (CSV/JSON) service.
+# Requires NOAA_CDO_TOKEN for authenticated endpoints.
+NOAA_CDO_API_BASE_URL = "https://www.ncdc.noaa.gov/cdo-web/api/v2"

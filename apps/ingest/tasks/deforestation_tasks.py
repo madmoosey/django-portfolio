@@ -36,7 +36,9 @@ def ingest_tree_cover_loss(self, state_fips=None):
                     county.state.fips_code, county.fips_code
                 )
                 if base_data and "data" in base_data and len(base_data["data"]) > 0:
-                    area_ha = base_data["data"][0].get("area_ha", 0)
+                    # GFW may return `"area_ha": null`; `or 0` handles both
+                    # missing keys and explicit null values.
+                    area_ha = float(base_data["data"][0].get("area_ha") or 0)
 
                     # Convert total county area from sq km to hectares (1 sq km = 100 ha)
                     total_area_ha = float(county.area_sq_km) * 100
@@ -57,11 +59,12 @@ def ingest_tree_cover_loss(self, state_fips=None):
                 with transaction.atomic():
                     for record in loss_data["data"]:
                         year = record.get("umd_tree_cover_loss__year")
-                        area_ha = record.get("area_ha", 0) or 0
+                        area_ha = float(record.get("area_ha") or 0)
 
                         # Calculate loss percentage relative to baseline
-                        if baseline and baseline.tree_cover_area_ha > 0:
-                            loss_percent = (area_ha / float(baseline.tree_cover_area_ha)) * 100
+                        baseline_ha = float(baseline.tree_cover_area_ha or 0) if baseline else 0
+                        if baseline_ha > 0:
+                            loss_percent = (area_ha / baseline_ha) * 100
                         else:
                             loss_percent = 0
 

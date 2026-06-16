@@ -11,6 +11,9 @@ class StormEventViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ActiveAlertViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = ActiveAlert.objects.all()
+    # Exclude Minor severity at the API level; they are also blocked at ingest.
+    queryset = ActiveAlert.objects.exclude(severity__iexact="Minor").order_by(
+        "severity", "-effective"
+    )
     serializer_class = ActiveAlertSerializer
     filterset_fields = ["event_type", "severity"]

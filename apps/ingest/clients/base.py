@@ -39,7 +39,20 @@ class BaseClient:
         try:
             response = self.session.get(url, params=params, headers=headers, timeout=self.timeout)
             response.raise_for_status()
-            return response.json()
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching {url}: {e}")
             raise
+
+        # Attempt JSON decode separately so we can log the raw body on failure.
+        # This catches cases where the API returns HTML error pages, plain-text
+        # 'null', or other non-JSON bodies with a 200 status.
+        try:
+            return response.json()
+        except requests.exceptions.JSONDecodeError as e:
+            snippet = response.text[:500].strip()
+            logger.error(
+                f"JSON decode failed for {url} "
+                f"(status={response.status_code}, content-type={response.headers.get('content-type')!r}). "
+                f"Raw body (first 500 chars): {snippet!r}"
+            )
+            raise ValueError(f"Non-JSON response from {url}: {snippet!r}") from e

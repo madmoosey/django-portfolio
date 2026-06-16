@@ -101,6 +101,11 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       CELERY_BROKER_URL: redis://localhost:6379/1
       DJANGO_SECRET_KEY: ci-test-secret-key
+      # NOAA Climate Data Online token — used by ingest_storm_events task.
+      # Store the real token in Settings → Secrets and variables → Actions → NOAA_CDO_TOKEN.
+      NOAA_CDO_TOKEN: ${{ secrets.NOAA_CDO_TOKEN }}
+      # EPA AirNow API — used by ingest_air_quality_observations task.
+      AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
 
     steps:
       - name: Checkout code
@@ -202,6 +207,50 @@ jobs:
           
           # 5. Sync the files directly to the production AWS S3 Media Bucket
           aws s3 sync ./staticfiles/ s3://$MEDIA_BUCKET/ --delete --exclude "media/*" --cache-control "max-age=86400"
+
+      - name: Inject NOAA_CDO_TOKEN into ECS Task Definitions
+        env:
+          NOAA_CDO_TOKEN: ${{ secrets.NOAA_CDO_TOKEN }}
+          AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
+        run: |
+          # Propagate the secret to all three ECS services by injecting it as a
+          # plaintext environment override in each task-definition revision.
+          for SERVICE in ${{ env.ECS_SERVICE_WEB }} ${{ env.ECS_SERVICE_WORKER }} ${{ env.ECS_SERVICE_BEAT }}; do
+            TASK_DEF_ARN=$(aws ecs describe-services \
+              --cluster ${{ env.ECS_CLUSTER }} \
+              --services $SERVICE \
+              --query 'services[0].taskDefinition' \
+              --output text)
+            # Fetch existing task def, patch in the env var, register new revision
+            aws ecs describe-task-definition \
+              --task-definition "$TASK_DEF_ARN" \
+              --query 'taskDefinition' \
+              --output json > /tmp/task_def.json
+            python3 - <<'PYEOF'
+          import json, sys
+          with open("/tmp/task_def.json") as f:
+              td = json.load(f)
+          secret_noaa = "$NOAA_CDO_TOKEN"
+          secret_airnow = "$AIRNOW_API_KEY"
+          for container in td.get("containerDefinitions", []):
+              env_list = container.setdefault("environment", [])
+              env_list = [e for e in env_list if e["name"] not in ("NOAA_CDO_TOKEN", "AIRNOW_API_KEY")]
+              if secret_noaa:
+                  env_list.append({"name": "NOAA_CDO_TOKEN", "value": secret_noaa})
+              if secret_airnow:
+                  env_list.append({"name": "AIRNOW_API_KEY", "value": secret_airnow})
+              container["environment"] = env_list
+          # Strip read-only fields before re-registering
+          for key in ["taskDefinitionArn", "revision", "status",
+                      "requiresAttributes", "compatibilities",
+                      "registeredAt", "registeredBy"]:
+              td.pop(key, None)
+          with open("/tmp/task_def_patched.json", "w") as f:
+              json.dump(td, f)
+          PYEOF
+            aws ecs register-task-definition \
+              --cli-input-json file:///tmp/task_def_patched.json
+          done
 
       - name: Force ECS Web Service Update
         run: aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE_WEB }} --force-new-deployment

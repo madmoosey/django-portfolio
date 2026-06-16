@@ -1,54 +1,387 @@
+/* =============================================================================
+   MapViewer layout
+   ============================================================================= */
+
 .map-viewer {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  height: calc(100vh - 120px);
+  gap: 1.5rem;
+  height: calc(100vh - 110px);
 }
 
 .map-card {
   flex: 1;
-  padding: 0 !important;
+  border-radius: var(--border-radius-lg, 12px);
   overflow: hidden;
-  border-radius: var(--border-radius-lg);
+  position: relative;
+  border: 1px solid var(--border-light, rgba(255,255,255,0.08));
+  background: #0a0f0a;
+  min-height: 500px;
+}
+
+/* =============================================================================
+   MapLibre overrides
+   ============================================================================= */
+
+.maplibregl-canvas { outline: none !important; }
+
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-bottom-left { display: none; } /* hide default attribution */
+
+/* =============================================================================
+   Glassmorphism panel base
+   ============================================================================= */
+
+.glass-panel {
+  background: rgba(10, 15, 10, 0.78);
+  border: 1px solid rgba(46, 204, 113, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+}
+
+/* =============================================================================
+   Layer toggle controls (top-right)
+   ============================================================================= */
+
+.map-layer-controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10;
+  padding: 0.85rem 1rem;
+  min-width: 175px;
+  composes: glass-panel from global;
+  /* inline instead of composes for plain CSS */
+  background: rgba(10, 15, 10, 0.82);
+  border: 1px solid rgba(46, 204, 113, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+}
+
+.layer-controls-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(46, 204, 113, 0.7);
+  margin: 0 0 0.65rem 0;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+  font-size: 0.82rem;
+  color: var(--text-secondary, #a0a0a0);
+  user-select: none;
+}
+
+.layer-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid rgba(255,255,255,0.25);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
   position: relative;
 }
 
-/* Custom Tooltip for MapLibre */
-.map-tooltip {
+.layer-item input[type="checkbox"]:checked {
+  background: var(--primary, #2ecc71);
+  border-color: var(--primary, #2ecc71);
+}
+
+.layer-item input[type="checkbox"]:checked::after {
+  content: '';
   position: absolute;
-  margin: 10px;
-  padding: 8px 12px;
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--border-radius);
-  font-family: var(--font-family);
-  font-size: 0.875rem;
-  pointer-events: none;
-  z-index: 100;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: var(--shadow-glass);
-  transform: translate(-50%, -100%);
-  transition: all 0.1s ease;
+  left: 2px;
+  top: -1px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid #000;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
 }
 
-/* MapLibre Canvas reset if needed */
-.maplibregl-canvas {
-  outline: none !important;
+.layer-item--active .layer-label {
+  color: var(--text-primary, #e0e0e0);
 }
 
-/* Control MapLibre popup styling if we ever use native Popups */
-.maplibregl-popup-content {
-  background: var(--bg-input) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-light);
-  border-radius: var(--border-radius);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+.layer-item--locked {
+  cursor: default;
+  opacity: 0.9;
 }
 
-.maplibregl-popup-tip {
-  border-top-color: var(--border-light) !important;
-  border-bottom-color: var(--border-light) !important;
+.layer-item--locked .layer-label {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.layer-lock {
+  margin-left: auto;
+  font-size: 0.8rem;
+}
+
+/* Colour swatches */
+.layer-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.layer-swatch--deforestation {
+  background: linear-gradient(135deg, rgba(251,191,36,0.8) 0%, rgba(127,29,29,0.9) 100%);
+}
+
+.layer-swatch--aq {
+  background: radial-gradient(circle, #f97316 0%, #fbbf24 100%);
+  border-radius: 50%;
+}
+
+.layer-swatch--alerts {
+  background: rgba(239, 68, 68, 0.6);
+  border: 1px solid #ef4444;
+}
+
+/* =============================================================================
+   Legend (bottom-left)
+   ============================================================================= */
+
+.map-legend {
+  position: absolute;
+  bottom: 2rem;
+  left: 1rem;
+  z-index: 10;
+  padding: 0.85rem 1rem;
+  min-width: 195px;
+  background: rgba(10, 15, 10, 0.82);
+  border: 1px solid rgba(46, 204, 113, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+}
+
+.legend-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(46, 204, 113, 0.7);
+  margin: 0 0 0.5rem 0;
+}
+
+.legend-title--sep {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.legend-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.legend-chip {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* =============================================================================
+   Stats bar (bottom-right)
+   ============================================================================= */
+
+.map-stats {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 10;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.4rem 0.8rem;
+  background: rgba(10, 15, 10, 0.78);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 999px;
+  font-size: 0.73rem;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.stat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.stat-dot--green  { background: #4ade80; }
+.stat-dot--yellow { background: #fbbf24; }
+.stat-dot--red    { background: #f87171; }
+
+/* =============================================================================
+   Map popup
+   ============================================================================= */
+
+/* Override MapLibre popup chrome */
+.map-popup .maplibregl-popup-content {
+  padding: 0 !important;
+  background: rgba(10, 15, 10, 0.95) !important;
+  border: 1px solid rgba(46, 204, 113, 0.2) !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.map-popup .maplibregl-popup-close-button {
+  color: var(--text-secondary, #a0a0a0);
+  font-size: 1rem;
+  padding: 4px 8px;
+  top: 4px;
+  right: 4px;
+}
+
+.map-popup .maplibregl-popup-close-button:hover {
+  color: var(--text-primary, #fff);
+  background: transparent;
+}
+
+.map-popup .maplibregl-popup-tip {
+  border-top-color: rgba(46, 204, 113, 0.2) !important;
+}
+
+/* Popup body */
+.mp-body {
+  padding: 0.9rem 1rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mp-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary, #e0e0e0);
+  margin-bottom: 0.1rem;
+  padding-right: 1.5rem; /* room for close btn */
+}
+
+.mp-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted, #6b7280);
+  margin-bottom: 0.3rem;
+}
+
+.mp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.mp-headline {
+  flex-direction: column;
+  padding: 0.35rem 0;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  margin: 0.2rem 0;
+}
+
+.mp-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #6b7280);
+  flex-shrink: 0;
+}
+
+.mp-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  text-align: right;
+}
+
+.mp-small { font-size: 0.72rem; font-weight: 400; }
+
+.mp-danger  { color: #f87171; }
+.mp-warning { color: #fbbf24; }
+.mp-info    { color: #7dd3fc; }
+.mp-field   { color: #86efac; font-size: 0.75rem; }
+.mp-pollutant { color: #7dd3fc; letter-spacing: 0.03em; }
+
+/* AQI value colouring */
+.mp-aqi             { font-size: 1.1rem; font-weight: 800; }
+.mp-moderate        { color: #fbbf24; }
+.mp-unhealthy-sensitive { color: #f97316; }
+.mp-unhealthy       { color: #ef4444; }
+.mp-very-unhealthy  { color: #a855f7; }
+.mp-hazardous       { color: #7f1d1d; }
+
+.mp-no-data {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+  font-style: italic;
+  margin-top: 0.25rem;
+}
+
+/* =============================================================================
+   Error overlay
+   ============================================================================= */
+
+.map-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(127, 29, 29, 0.85);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  border-radius: 10px;
+  padding: 1rem 1.5rem;
+  font-size: 0.9rem;
+  text-align: center;
+  backdrop-filter: blur(10px);
 }

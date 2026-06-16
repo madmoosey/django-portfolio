@@ -21,7 +21,18 @@ app = Celery("arborwatch")
 # should have a `CELERY_` prefix in Django settings.
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-# Load task modules from all registered Django apps.
+# Explicitly include every task submodule so workers import them before starting.
+# This is more reliable than relying on autodiscover_tasks() + __init__.py wildcard
+# imports — a missing line in __init__.py would cause NotRegistered errors at runtime.
+app.conf.include = [
+    "apps.ingest.tasks.air_quality_tasks",
+    "apps.ingest.tasks.analysis_tasks",
+    "apps.ingest.tasks.deforestation_tasks",
+    "apps.ingest.tasks.storm_tasks",
+    "apps.ingest.tasks.weather_tasks",
+]
+
+# Also run autodiscover for any other apps that define tasks.py at the top level.
 app.autodiscover_tasks()
 
 from celery.schedules import crontab
@@ -30,6 +41,12 @@ app.conf.beat_schedule = {
     "ingest-tree-cover-loss-weekly": {
         "task": "apps.ingest.tasks.deforestation_tasks.ingest_tree_cover_loss",
         "schedule": crontab(day_of_week="sun", hour=2, minute=0),
+    },
+    "sync-weather-stations-monthly": {
+        "task": "apps.ingest.tasks.weather_tasks.sync_weather_stations",
+        # 1st of every month at 01:00 UTC — runs before the daily 04:00 ingest
+        # so any new stations are present when observations are collected.
+        "schedule": crontab(day_of_month=1, hour=1, minute=0),
     },
     "ingest-weather-daily": {
         "task": "apps.ingest.tasks.weather_tasks.ingest_temperature_observations",
@@ -46,6 +63,12 @@ app.conf.beat_schedule = {
     "predict-risk-scores-weekly": {
         "task": "apps.ingest.tasks.analysis_tasks.predict_county_risk_scores",
         "schedule": crontab(day_of_week="sun", hour=6, minute=0),
+    },
+    "ingest-air-quality-hourly": {
+        "task": "apps.ingest.tasks.air_quality_tasks.ingest_air_quality_observations",
+        # AirNow publishes new hourly data ~10 min after the hour; run at :15
+        # to ensure fresh readings are always available.
+        "schedule": crontab(minute=15),
     },
 }
 

@@ -16,7 +16,9 @@ class TreeCoverBaselineViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TreeCoverLossViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = TreeCoverLoss.objects.select_related("county", "county__state").all()
+    queryset = TreeCoverLoss.objects.select_related("county", "county__state").order_by(
+        "-year", "-loss_area_ha"
+    )
     serializer_class = TreeCoverLossSerializer
     filterset_class = TreeCoverLossFilter
 
