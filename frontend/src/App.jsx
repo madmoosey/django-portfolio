@@ -8,9 +8,9 @@ import './index.css';
 function App() {
   return (
     <Router>
-      <div className="app-container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
+      <div className="app-container">
         <Navbar />
-        <main>
+        <main className="app-main">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/map" element={<MapViewer />} />

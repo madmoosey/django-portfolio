@@ -69,86 +69,87 @@ class CountyViewSet(viewsets.ReadOnlyModelViewSet):
         return super().list(request, *args, **kwargs)
 
     @action(detail=False, url_path="choropleth", url_name="choropleth")
-    @method_decorator(cache_page(60 * 30))  # 30-min cache; loss data changes infrequently
     def choropleth(self, request):
         """
         Lightweight county choropleth for the Risk Map.
 
+        Performance strategy
+        --------------------
+        1. **Pre-stored geometry**: uses County.simplified_geometry when available
+           (populated by the ``build_choropleth_geometry`` Celery task — runs
+           automatically every Sunday at 03:00 UTC, or trigger on-demand with
+           ``build_choropleth_geometry.delay()``).
+           Falls back to ST_SimplifyPreserveTopology(geometry, 0.01) so the
+           endpoint works before the task has run.
+
+        2. **SQL-level JSON aggregation**: the entire GeoJSON FeatureCollection
+           is built inside PostgreSQL using ``json_agg`` + ``json_build_object``
+           + ``ST_AsGeoJSON``.  This eliminates:
+             - 3 000+ ``json.loads()`` calls in Python
+             - a Python-level dict-building loop
+             - double JSON serialisation (string → dict → string)
+
+        3. **Low-level cache** (``django.core.cache``): keyed as
+           ``choropleth:v1``, TTL 30 min.  The key is predictable, so the
+           ``build_choropleth_cache`` management command can bust it reliably
+           (unlike ``cache_page`` whose keys are request-URL hashes).
+
         Returns a bare GeoJSON FeatureCollection (no DRF pagination wrapper).
-        Geometry is simplified server-side via ST_SimplifyPreserveTopology
-        (tolerance=0.01°, ~1 km) — roughly 85% smaller than the full county
-        endpoint. Each feature's properties include the most recent
-        tree-cover-loss hectares and year for choropleth colouring.
-
-        GeoJSON is built manually from SQL annotations rather than via
-        GeoFeatureModelSerializer, because annotated fields are not model
-        fields and would fail validation.
-
-        Cached 30 minutes.
         """
-        from django.contrib.gis.db.models import GeometryField
+        from django.core.cache import cache
+        from django.db import connection
 
-        from apps.deforestation.models import TreeCoverLoss
+        CACHE_KEY = "choropleth:v1"
+        CACHE_TTL = 60 * 30  # 30 minutes
 
-        # _STSimplify: wraps ST_SimplifyPreserveTopology(geometry, tolerance)
-        # output_field=GeometryField so Django knows it returns geometry.
-        class _STSimplify(Func):
-            function = "ST_SimplifyPreserveTopology"
-            arity = 2
-            output_field = GeometryField(srid=4326)
+        cached = cache.get(CACHE_KEY)
+        if cached is not None:
+            return JsonResponse(cached, safe=False)
 
-        # Subquery: most recent loss_area_ha per county
-        latest_loss = (
-            TreeCoverLoss.objects.filter(county=OuterRef("pk"))
-            .order_by("-year")
-            .values("loss_area_ha")[:1]
-        )
-        # Subquery: year that loss belongs to
-        latest_year = (
-            TreeCoverLoss.objects.filter(county=OuterRef("pk")).order_by("-year").values("year")[:1]
-        )
-
-        # Annotate each county with:
-        #   geojson_str       — ST_AsGeoJSON of the simplified geometry (string)
-        #   latest_loss_ha    — most recent loss_area_ha (float | None)
-        #   latest_loss_year  — year of that loss record (int | None)
-        qs = (
-            County.objects.select_related("state").annotate(
-                geojson_str=AsGeoJSON(
-                    _STSimplify("geometry", Value(0.01)),
-                    precision=6,
-                ),
-                latest_loss_ha=Subquery(latest_loss, output_field=FloatField()),
-                latest_loss_year=Subquery(latest_year, output_field=IntegerField()),
+        sql = """
+            SELECT json_build_object(
+                'type',     'FeatureCollection',
+                'count',    COUNT(*),
+                'features', COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'type',     'Feature',
+                            'id',       c.fips_code,
+                            'geometry', CASE
+                                WHEN c.simplified_geometry IS NOT NULL
+                                    THEN ST_AsGeoJSON(c.simplified_geometry, 6)::json
+                                ELSE ST_AsGeoJSON(
+                                        ST_SimplifyPreserveTopology(c.geometry, 0.01),
+                                        6
+                                     )::json
+                            END,
+                            'properties', json_build_object(
+                                'fips_code',         c.fips_code,
+                                'name',              c.name,
+                                'state_abbreviation', s.abbreviation,
+                                'loss_area_ha',      latest.loss_area_ha,
+                                'loss_year',         latest.year
+                            )
+                        )
+                    ),
+                    '[]'::json
+                )
             )
-            # Only pull the columns we actually need — avoids fetching full geometry
-            .only("fips_code", "name", "state")
-        )
+            FROM geodata_county c
+            JOIN geodata_state s ON s.id = c.state_id
+            LEFT JOIN LATERAL (
+                SELECT loss_area_ha, year
+                FROM deforestation_treecoverloss
+                WHERE county_id = c.id
+                ORDER BY year DESC
+                LIMIT 1
+            ) latest ON true
+        """
 
-        features = []
-        for county in qs.iterator(chunk_size=500):
-            geometry = json.loads(county.geojson_str) if county.geojson_str else None
-            loss_ha = float(county.latest_loss_ha) if county.latest_loss_ha is not None else None
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            (payload,) = cursor.fetchone()
 
-            features.append(
-                {
-                    "type": "Feature",
-                    "id": county.fips_code,
-                    "geometry": geometry,
-                    "properties": {
-                        "fips_code": county.fips_code,
-                        "name": county.name,
-                        "state_abbreviation": county.state.abbreviation,
-                        "loss_area_ha": loss_ha,
-                        "loss_year": county.latest_loss_year,
-                    },
-                }
-            )
-
-        return JsonResponse(
-            {
-                "type": "FeatureCollection",
-                "count": len(features),
-                "features": features,
-            }
-        )
+        cache.set(CACHE_KEY, payload, CACHE_TTL)
+        # payload is already a dict (Django's psycopg2 driver deserialises json columns)
+        return JsonResponse(payload, safe=False)

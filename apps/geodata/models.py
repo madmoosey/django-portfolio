@@ -50,6 +50,16 @@ class County(BaseModel):
 
     geometry = models.MultiPolygonField(srid=4326)
 
+    # Pre-simplified geometry (tolerance=0.01°, ~1 km) for the choropleth overlay.
+    # Populated by the build_choropleth_cache management command after each ingest.
+    # Eliminates the per-request ST_SimplifyPreserveTopology cost (~80 % of query time).
+    simplified_geometry = models.MultiPolygonField(
+        srid=4326,
+        null=True,
+        blank=True,
+        help_text="Pre-simplified geometry for the choropleth endpoint (tolerance=0.01°).",
+    )
+
     area_sq_km = models.DecimalField(
         max_digits=15, decimal_places=2, help_text="Total area in square kilometers"
     )

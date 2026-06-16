@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Loader } from '../components/ui/Loader';
-import { AlertTriangle, CloudRain, Trees, Wind } from 'lucide-react';
+import { AlertTriangle, ChevronDown, CloudRain, Trees, Wind } from 'lucide-react';
 import { fetchActiveAlerts, fetchDeforestationLoss, fetchAirQuality } from '../services/api';
 import './Dashboard.css';
 
@@ -10,7 +10,6 @@ import './Dashboard.css';
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Map NWS severity to badge colour variant
 const severityVariant = (severity) => {
   switch ((severity || '').toLowerCase()) {
     case 'extreme':  return 'danger';
@@ -29,25 +28,61 @@ const haToFields = (ha) => {
     : fields.toLocaleString();
 };
 
-// AQI category labels, badge variants, and colour per EPA breakpoints
 const aqiMeta = (aqi) => {
   const n = Number(aqi);
-  if (n <= 50)  return { label: 'Good',          variant: 'success' };
-  if (n <= 100) return { label: 'Moderate',       variant: 'warning' };
-  if (n <= 150) return { label: 'Unhealthy (Sensitive)', variant: 'warning' };
-  if (n <= 200) return { label: 'Unhealthy',      variant: 'danger'  };
-  if (n <= 300) return { label: 'Very Unhealthy', variant: 'danger'  };
-  return               { label: 'Hazardous',      variant: 'danger'  };
+  if (n <= 50)  return { label: 'Good',                    variant: 'success' };
+  if (n <= 100) return { label: 'Moderate',                variant: 'warning' };
+  if (n <= 150) return { label: 'Unhealthy (Sensitive)',   variant: 'warning' };
+  if (n <= 200) return { label: 'Unhealthy',               variant: 'danger'  };
+  if (n <= 300) return { label: 'Very Unhealthy',          variant: 'danger'  };
+  return               { label: 'Hazardous',               variant: 'danger'  };
 };
 
 // ---------------------------------------------------------------------------
-// Component
+// Accordion card — collapses on mobile, always-open on desktop
+// ---------------------------------------------------------------------------
+
+const AccordionCard = ({ id, icon, title, children }) => {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <Card className="dashboard-card">
+      <button
+        className={`accordion-header ${open ? 'is-open' : ''}`}
+        onClick={() => setOpen(prev => !prev)}
+        aria-expanded={open}
+        aria-controls={`accordion-${id}`}
+        id={`accordion-btn-${id}`}
+      >
+        <div className="card-header-inner">
+          {icon}
+          <h3>{title}</h3>
+        </div>
+        <ChevronDown className="accordion-chevron" size={20} />
+      </button>
+
+      <div
+        id={`accordion-${id}`}
+        role="region"
+        aria-labelledby={`accordion-btn-${id}`}
+        className={`accordion-body ${open ? 'is-open' : ''}`}
+      >
+        <div className="card-content">
+          {children}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Dashboard
 // ---------------------------------------------------------------------------
 
 export const Dashboard = () => {
   const [alerts, setAlerts]     = useState([]);
   const [lossData, setLossData] = useState([]);
-  const [aqData, setAqData]     = useState([]);   // placeholder — wired up by AQ ingestion plan
+  const [aqData, setAqData]     = useState([]);
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
@@ -59,8 +94,6 @@ export const Dashboard = () => {
           fetchAirQuality(5),
         ]);
 
-        // ActiveAlertSerializer wraps the FeatureCollection inside the DRF
-        // pagination envelope: alertsData.results.features
         const featureCollection = alertsData.results || {};
         const rawFeatures = featureCollection.features || [];
         setAlerts(rawFeatures.map(f => ({ id: f.id, ...f.properties })));
@@ -89,108 +122,101 @@ export const Dashboard = () => {
       <div className="dashboard-grid dashboard-grid--three">
 
         {/* ── Column 1: Recent Deforestation ── */}
-        <Card className="dashboard-card">
-          <div className="card-header">
-            <Trees className="card-icon success" size={24} />
-            <h3>Recent Deforestation</h3>
-          </div>
-          <div className="card-content">
-            {lossData.length > 0 ? (
-              <ul className="alert-list">
-                {lossData.slice(0, 5).map(loss => (
-                  <li key={loss.id} className="alert-item">
-                    <div className="alert-meta">
-                      <span className="alert-area">
-                        {loss.county_name}, {loss.state_abbreviation} ({loss.year})
-                      </span>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-                        <Badge variant="danger">
-                          {parseFloat(loss.loss_area_ha).toLocaleString()} HA
-                        </Badge>
-                        <Badge variant="field">
-                          🏈 {haToFields(loss.loss_area_ha)} football fields
-                        </Badge>
-                      </div>
-                    </div>
-                    <p className="alert-event">Tree cover loss detected.</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted">No recent deforestation data available.</p>
-            )}
-          </div>
-        </Card>
-
-        {/* ── Column 2: Air Quality ── */}
-        <Card className="dashboard-card">
-          <div className="card-header">
-            <Wind className="card-icon aq" size={24} />
-            <h3>Air Quality</h3>
-          </div>
-          <div className="card-content">
-            {aqData.length > 0 ? (
-              <ul className="alert-list">
-                {aqData.slice(0, 5).map(obs => {
-                  const { label, variant } = aqiMeta(obs.aqi);
-                  return (
-                    <li key={obs.id} className="alert-item">
-                      <div className="alert-meta">
-                        <span className="alert-area">{obs.city}, {obs.state}</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-                          <Badge variant={variant}>AQI {obs.aqi}</Badge>
-                          <Badge variant="info">{obs.pollutant}</Badge>
-                        </div>
-                      </div>
-                      <p className="alert-event">{label}</p>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <div className="aq-coming-soon">
-                <Wind size={36} className="aq-placeholder-icon" />
-                <p className="text-muted">Air quality ingestion coming soon.</p>
-                <p className="aq-sub">
-                  Will display real-time EPA AirNow AQI readings for the
-                  highest-pollution US counties once the ingestion pipeline
-                  is deployed.
-                </p>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* ── Column 3: Active Severe Weather ── */}
-        <Card className="dashboard-card">
-          <div className="card-header">
-            <CloudRain className="card-icon info" size={24} />
-            <h3>Active Severe Weather</h3>
-          </div>
-          <div className="card-content">
-            {alerts.length > 0 ? (
-              <ul className="alert-list">
-                {alerts.slice(0, 5).map(alert => (
-                  <li key={alert.id} className="alert-item">
-                    <div className="alert-meta">
-                      <span className="alert-area">
-                        {alert.affected_zones?.length > 0
-                          ? `${alert.affected_zones.length} zone(s) affected`
-                          : alert.event_type}
-                      </span>
-                      <Badge variant={severityVariant(alert.severity)}>
-                        {alert.severity}
+        <AccordionCard
+          id="deforestation"
+          icon={<Trees className="card-icon success" size={22} />}
+          title="Recent Deforestation"
+        >
+          {lossData.length > 0 ? (
+            <ul className="alert-list">
+              {lossData.slice(0, 5).map(loss => (
+                <li key={loss.id} className="alert-item">
+                  <div className="alert-meta">
+                    <span className="alert-area">
+                      {loss.county_name}, {loss.state_abbreviation} ({loss.year})
+                    </span>
+                    <div className="alert-badges">
+                      <Badge variant="danger">
+                        {parseFloat(loss.loss_area_ha).toLocaleString()} HA
+                      </Badge>
+                      <Badge variant="field">
+                        🏈 {haToFields(loss.loss_area_ha)} fields
                       </Badge>
                     </div>
-                    <p className="alert-event">{alert.headline || alert.event_type}</p>
+                  </div>
+                  <p className="alert-event">Tree cover loss detected.</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted">No recent deforestation data available.</p>
+          )}
+        </AccordionCard>
+
+        {/* ── Column 2: Air Quality ── */}
+        <AccordionCard
+          id="air-quality"
+          icon={<Wind className="card-icon aq" size={22} />}
+          title="Air Quality"
+        >
+          {aqData.length > 0 ? (
+            <ul className="alert-list">
+              {aqData.slice(0, 5).map(obs => {
+                const { label, variant } = aqiMeta(obs.aqi);
+                return (
+                  <li key={obs.id} className="alert-item">
+                    <div className="alert-meta">
+                      <span className="alert-area">{obs.city}, {obs.state}</span>
+                      <div className="alert-badges">
+                        <Badge variant={variant}>AQI {obs.aqi}</Badge>
+                        <Badge variant="info">{obs.pollutant}</Badge>
+                      </div>
+                    </div>
+                    <p className="alert-event">{label}</p>
                   </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted">No active severe weather alerts right now.</p>
-            )}
-          </div>
-        </Card>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="aq-coming-soon">
+              <Wind size={36} className="aq-placeholder-icon" />
+              <p className="text-muted">Air quality ingestion coming soon.</p>
+              <p className="aq-sub">
+                Will display real-time EPA AirNow AQI readings for the
+                highest-pollution US counties once the ingestion pipeline is deployed.
+              </p>
+            </div>
+          )}
+        </AccordionCard>
+
+        {/* ── Column 3: Active Severe Weather ── */}
+        <AccordionCard
+          id="severe-weather"
+          icon={<CloudRain className="card-icon info" size={22} />}
+          title="Active Severe Weather"
+        >
+          {alerts.length > 0 ? (
+            <ul className="alert-list">
+              {alerts.slice(0, 5).map(alert => (
+                <li key={alert.id} className="alert-item">
+                  <div className="alert-meta">
+                    <span className="alert-area">
+                      {alert.affected_zones?.length > 0
+                        ? `${alert.affected_zones.length} zone(s) affected`
+                        : alert.event_type}
+                    </span>
+                    <Badge variant={severityVariant(alert.severity)}>
+                      {alert.severity}
+                    </Badge>
+                  </div>
+                  <p className="alert-event">{alert.headline || alert.event_type}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted">No active severe weather alerts right now.</p>
+          )}
+        </AccordionCard>
 
       </div>
     </div>

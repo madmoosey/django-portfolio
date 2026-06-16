@@ -152,7 +152,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # =============================================================================
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+# Eastern Time (EST/EDT) — Django auto-handles DST via the IANA name.
+# USE_TZ=True means datetimes are stored as UTC in the DB and converted
+# to America/New_York for template rendering and admin display.
+TIME_ZONE = "America/New_York"
 USE_I18N = True
 USE_TZ = True
 
@@ -268,7 +271,7 @@ CELERY_RESULT_EXTENDED = True
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
-CELERY_TIMEZONE = "UTC"
+CELERY_TIMEZONE = "America/New_York"  # matches Django TIME_ZONE; beat schedules in Eastern
 
 # Task execution settings
 CELERY_TASK_ACKS_LATE = True

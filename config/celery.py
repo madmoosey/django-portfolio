@@ -25,6 +25,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # This is more reliable than relying on autodiscover_tasks() + __init__.py wildcard
 # imports — a missing line in __init__.py would cause NotRegistered errors at runtime.
 app.conf.include = [
+    "apps.geodata.tasks",
     "apps.ingest.tasks.air_quality_tasks",
     "apps.ingest.tasks.analysis_tasks",
     "apps.ingest.tasks.deforestation_tasks",
@@ -69,6 +70,12 @@ app.conf.beat_schedule = {
         # AirNow publishes new hourly data ~10 min after the hour; run at :15
         # to ensure fresh readings are always available.
         "schedule": crontab(minute=15),
+    },
+    # Run 1 hour after the Sunday deforestation ingest (02:00) so simplified
+    # geometries are always in sync with fresh loss data.
+    "build-choropleth-geometry-weekly": {
+        "task": "apps.geodata.tasks.build_choropleth_geometry",
+        "schedule": crontab(day_of_week="sun", hour=3, minute=0),
     },
 }
 
