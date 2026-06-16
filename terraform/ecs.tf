@@ -26,7 +26,8 @@ locals {
   common_environment = [
     { name = "DJANGO_SETTINGS_MODULE", value = "config.settings.production" },
     { name = "DJANGO_SECRET_KEY", value = var.django_secret_key },
-    { name = "DJANGO_ALLOWED_HOSTS", value = "${var.domain_name},${aws_lb.main.dns_name},localhost,127.0.0.1" },
+    { name = "DJANGO_ALLOWED_HOSTS", value = "api.${var.domain_name},${var.domain_name},${aws_lb.main.dns_name},localhost,127.0.0.1" },
+    { name = "CORS_ALLOWED_ORIGINS", value = "https://${var.domain_name}" },
     { name = "POSTGRES_DB", value = "arborwatch" },
     { name = "POSTGRES_USER", value = "arborwatch" },
     { name = "POSTGRES_PASSWORD", value = var.db_password },
@@ -36,7 +37,9 @@ locals {
     { name = "CELERY_BROKER_URL", value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:6379/1" },
     { name = "AWS_STORAGE_BUCKET_NAME", value = aws_s3_bucket.media.bucket },
     { name = "GFW_API_KEY", value = var.gfw_api_key },
-    { name = "NOAA_CDO_TOKEN", value = var.noaa_cdo_token }
+    { name = "NOAA_CDO_TOKEN", value = var.noaa_cdo_token },
+    { name = "DJANGO_SUPERUSER_USERNAME", value = var.django_superuser_username },
+    { name = "DJANGO_SUPERUSER_PASSWORD", value = var.django_superuser_password }
   ]
 }
 

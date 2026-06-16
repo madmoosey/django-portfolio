@@ -8,14 +8,13 @@ terraform {
     }
   }
 
-  # Uncomment and configure this block AFTER running the bootstrap module
-  # backend "s3" {
-  #   bucket         = "arborwatch-terraform-state-YOUR_ACCOUNT_ID"
-  #   key            = "prod/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "arborwatch-terraform-locks"
-  #   encrypt        = true
-  # }
+  backend "s3" {
+    bucket         = "arborwatch-terraform-state-452112380264"
+    key            = "prod/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "arborwatch-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
@@ -29,3 +28,5 @@ provider "aws" {
     }
   }
 }
+
+data "aws_caller_identity" "current" {}

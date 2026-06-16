@@ -23,9 +23,9 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db-vol:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arborwatch} -d ${POSTGRES_DB:-arborwatch}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arborwatch} -d ${POSTGRES_DB:-arborwatch}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -42,7 +42,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -57,15 +57,7 @@ services:
       dockerfile: Dockerfile
     container_name: arborwatch-web
     command: >
-      gunicorn config.wsgi:application
-      --bind 0.0.0.0:8000
-      --workers 2
-      --worker-class gthread
-      --threads 2
-      --timeout 120
-      --access-logfile -
-      --error-logfile -
-      --reload
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --worker-class gthread --threads 2 --timeout 120 --access-logfile - --error-logfile - --reload
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.local
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key-change-in-production}
@@ -101,12 +93,7 @@ services:
       dockerfile: Dockerfile
     container_name: arborwatch-celery-worker
     command: >
-      celery -A config worker
-      --loglevel=info
-      --concurrency=2
-      --queues=default,ingest,weather,analysis
-      --max-tasks-per-child=1000
-      -E
+      celery -A config worker --loglevel=info --concurrency=2 --queues=default,ingest,weather,analysis --max-tasks-per-child=1000 -E
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.local
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key-change-in-production}
@@ -138,9 +125,7 @@ services:
       dockerfile: Dockerfile
     container_name: arborwatch-celery-beat
     command: >
-      celery -A config beat
-      --loglevel=info
-      --scheduler=django_celery_beat.schedulers:DatabaseScheduler
+      celery -A config beat --loglevel=info --scheduler=django_celery_beat.schedulers:DatabaseScheduler
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.local
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key-change-in-production}
@@ -170,10 +155,7 @@ services:
       dockerfile: Dockerfile
     container_name: arborwatch-flower
     command: >
-      celery -A config flower
-      --port=5555
-      --broker_api=redis://redis:6379/1
-      --basic-auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+      celery -A config flower --port=5555 --broker_api=redis://redis:6379/1 --basic-auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.local
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key-change-in-production}
@@ -192,8 +174,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # React Frontend (Vite)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: arborwatch-frontend
+    working_dir: /app
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5174:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - web
+    restart: unless-stopped
+
 volumes:
-  postgres_data:
+  db-vol:
   redis_data:
   static_data:
   media_data:

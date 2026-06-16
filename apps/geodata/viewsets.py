@@ -32,7 +32,7 @@ class StateViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = GeoJsonPagination
 
     # State boundaries rarely change, aggressively cache the list view for 24 hours
-    @method_decorator(cache_page(60 * 60 * 24))
+    # @method_decorator(cache_page(60 * 60 * 24))
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
@@ -53,6 +53,6 @@ class CountyViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = GeoJsonPagination
 
     # County boundaries rarely change, aggressively cache the list view for 24 hours
-    @method_decorator(cache_page(60 * 60 * 24))
+    # @method_decorator(cache_page(60 * 60 * 24))
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)

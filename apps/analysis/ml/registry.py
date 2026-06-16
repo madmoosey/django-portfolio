@@ -42,7 +42,7 @@ class ModelRegistry:
         """Load the active champion model for inference."""
         active_record = MLModel.objects.filter(risk_type=risk_type, is_active=True).first()
         if not active_record or not active_record.s3_path:
-            return None
+            return None, None
 
         try:
             model = joblib.load(active_record.s3_path)

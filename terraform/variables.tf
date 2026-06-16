@@ -70,6 +70,19 @@ variable "django_secret_key" {
   sensitive   = true
 }
 
+variable "django_superuser_username" {
+  description = "Django Superuser Username"
+  type        = string
+  default     = ""
+}
+
+variable "django_superuser_password" {
+  description = "Django Superuser Password"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "gfw_api_key" {
   description = "Global Forest Watch API Key"
   type        = string

@@ -14,7 +14,7 @@ import requests
 
 GFW_API_URL = "https://data-api.globalforestwatch.org/auth/apikey"
 
-def generate_api_key(alias, organization, email, domains=None, token=None):
+def generate_api_key(alias, organization, email, domains=None, token=None, never_expires=True):
     """
     Sends a POST request to the GFW Data API to generate a new API key.
     """
@@ -68,6 +68,8 @@ if __name__ == "__main__":
     parser.add_argument("--email", required=True, help="Email address of POC")
     parser.add_argument("--domains", nargs="*", help="List of domains to allow (e.g. localhost arborwatch.net)")
     parser.add_argument("--token", help="Bearer token if authentication is required by GFW")
+    parser.add_argument("--never_expires", action="store_true", default=True, help="Does the key expire (defaults to True)")
+
 
     args = parser.parse_args()
 
@@ -76,5 +78,6 @@ if __name__ == "__main__":
         organization=args.org,
         email=args.email,
         domains=args.domains,
-        token=args.token
+        token=args.token,
+        never_expires=args.never_expires,
     )
