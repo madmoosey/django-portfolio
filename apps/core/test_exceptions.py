@@ -41,7 +41,7 @@ class TestCustomExceptionHandler(TestCase):
     def test_wraps_authentication_failed(self):
         exc = AuthenticationFailed()
         response = custom_exception_handler(exc, self._context())
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(response.data["error"]["code"], "authentication_failed")
 
     def test_validation_error_dict_sets_details_and_message(self):
