@@ -1,4 +1,5 @@
 import logging
+
 import requests
 
 from django.conf import settings
@@ -38,7 +39,7 @@ class GFWClient(BaseClient):
         """
         adm1 = int(state_fips)
         # County FIPS is 5 digits: first 2 are state, last 3 are county
-        adm2 = int(county_fips[len(state_fips):])
+        adm2 = int(county_fips[len(state_fips) :])
         return adm1, adm2
 
     def get_county_tree_cover_loss(self, state_fips, county_fips):

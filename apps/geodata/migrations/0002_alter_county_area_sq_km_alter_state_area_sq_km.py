@@ -6,18 +6,22 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('geodata', '0001_initial'),
+        ("geodata", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='county',
-            name='area_sq_km',
-            field=models.DecimalField(decimal_places=2, help_text='Total area in square kilometers', max_digits=15),
+            model_name="county",
+            name="area_sq_km",
+            field=models.DecimalField(
+                decimal_places=2, help_text="Total area in square kilometers", max_digits=15
+            ),
         ),
         migrations.AlterField(
-            model_name='state',
-            name='area_sq_km',
-            field=models.DecimalField(decimal_places=2, help_text='Total area in square kilometers', max_digits=15),
+            model_name="state",
+            name="area_sq_km",
+            field=models.DecimalField(
+                decimal_places=2, help_text="Total area in square kilometers", max_digits=15
+            ),
         ),
     ]

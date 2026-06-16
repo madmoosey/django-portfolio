@@ -6,11 +6,7 @@ Admin interface at /admin/.
 API documentation at /api/docs/ and /api/redoc/.
 """
 
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularRedocView,
-    SpectacularSwaggerView,
-)
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from django.conf import settings
 from django.conf.urls.static import static
@@ -80,6 +76,7 @@ if settings.DEBUG:
     # Debug toolbar
     if "debug_toolbar" in settings.INSTALLED_APPS:
         import debug_toolbar  # isort: skip
+
         urlpatterns = [
             path("__debug__/", include(debug_toolbar.urls)),
         ] + urlpatterns

@@ -10,4 +10,3 @@ print(resp1.status_code, resp1.text[:200])
 print("Testing with Bearer...")
 resp2 = requests.get(url, headers={"Authorization": f"Bearer {api_key}"})
 print(resp2.status_code, resp2.text[:200])
-

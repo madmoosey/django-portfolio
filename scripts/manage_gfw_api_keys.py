@@ -14,11 +14,13 @@ Usage:
 """
 
 import argparse
-import sys
 import json
+import sys
+
 import requests
 
 GFW_API_BASE_URL = "https://data-api.globalforestwatch.org/auth"
+
 
 def list_api_keys(token):
     """
@@ -26,10 +28,7 @@ def list_api_keys(token):
     Retrieves all API keys associated with the authenticated user.
     """
     url = f"{GFW_API_BASE_URL}/apikeys"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     print(f"[*] Fetching API keys from {url}")
     try:
@@ -66,11 +65,8 @@ def validate_api_key(api_key, token):
     Validates the provided API key.
     """
     url = f"{GFW_API_BASE_URL}/apikey/{api_key}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
     print(f"[*] Validating API Key: {api_key}")
     print(f"[*] Endpoint: {url}")
     try:
@@ -105,7 +101,9 @@ if __name__ == "__main__":
 
     # Subparser for 'list'
     list_parser = subparsers.add_parser("list", help="List all API keys for your account")
-    list_parser.add_argument("--token", required=True, help="Your OAuth2 Bearer token (generated via get_gfw_token.py)")
+    list_parser.add_argument(
+        "--token", required=True, help="Your OAuth2 Bearer token (generated via get_gfw_token.py)"
+    )
 
     # Subparser for 'validate'
     validate_parser = subparsers.add_parser("validate", help="Validate an existing API key")

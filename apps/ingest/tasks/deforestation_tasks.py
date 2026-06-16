@@ -66,7 +66,9 @@ def ingest_tree_cover_loss(self, state_fips=None):
                             loss_percent = 0
 
                         # Map the GFW loss driver category to our primary_driver field
-                        primary_driver = record.get("wri_google_tree_cover_loss_drivers__category") or ""
+                        primary_driver = (
+                            record.get("wri_google_tree_cover_loss_drivers__category") or ""
+                        )
 
                         TreeCoverLoss.objects.update_or_create(
                             county=county,
