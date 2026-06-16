@@ -7,12 +7,14 @@ from .base import BaseClient
 
 logger = logging.getLogger(__name__)
 
+# Standard canopy cover density threshold used by GFW dashboards.
+GFW_CANOPY_THRESHOLD = 30
+
 
 class GFWClient(BaseClient):
     """Client for the Global Forest Watch Data API."""
 
     def __init__(self):
-        # We use the default GFW data API url
         super().__init__(base_url=settings.GFW_API_BASE_URL)
         self.api_key = settings.GFW_API_KEY
 
@@ -23,11 +25,28 @@ class GFWClient(BaseClient):
             headers["Origin"] = "http://localhost:8000"
         return headers
 
+    @staticmethod
+    def _fips_to_gadm(state_fips, county_fips):
+        """
+        Convert US FIPS codes to GFW GADM administrative integers.
+
+        For USA, the GFW GADM IDs map as follows:
+          adm1 = int(state_fips)                  e.g. '13' -> 13 (Georgia)
+          adm2 = int(county_fips[len(state_fips):]) e.g. '13011' -> 11 (Banks County)
+
+        This mapping was validated against the gadm__tcl__adm2_change dataset.
+        """
+        adm1 = int(state_fips)
+        # County FIPS is 5 digits: first 2 are state, last 3 are county
+        adm2 = int(county_fips[len(state_fips):])
+        return adm1, adm2
+
     def get_county_tree_cover_loss(self, state_fips, county_fips):
         """
-        Fetch tree cover loss data for a specific US county.
-        Because GFW uses GADM administrative boundaries (iso='USA', adm1=state, adm2=county),
-        we would normally issue an SQL query to their dataset API.
+        Fetch annual tree cover loss data for a specific US county.
+
+        Uses the pre-aggregated gadm__tcl__adm2_change dataset which returns
+        yearly loss without requiring a spatial geometry parameter.
         """
         if not self.api_key:
             logger.warning(
@@ -35,26 +54,27 @@ class GFWClient(BaseClient):
             )
             return self._get_mocked_loss_data(state_fips, county_fips)
 
-        # GFW API Endpoint for UMD Tree Cover Loss
-        # Example SQL: SELECT umd_tree_cover_loss__year, SUM(umd_tree_cover_loss__ha)
-        # FROM umd_tree_cover_loss WHERE iso = 'USA' AND adm1 = {state_id} AND adm2 = {county_id}
-        # GROUP BY umd_tree_cover_loss__year
+        adm1, adm2 = self._fips_to_gadm(state_fips, county_fips)
 
-        # Note: mapping FIPS to GADM IDs can be complex, so in a real production scenario
-        # we would either maintain a mapping table or use spatial intersection queries.
-
-        endpoint = "dataset/umd_tree_cover_loss/latest/query"
-        sql = f"SELECT umd_tree_cover_loss__year, SUM(umd_tree_cover_loss__ha) as area_ha FROM data WHERE iso = 'USA' AND adm1 = '{state_fips}' AND adm2 = '{county_fips}' GROUP BY umd_tree_cover_loss__year"
+        endpoint = "dataset/gadm__tcl__adm2_change/latest/query"
+        sql = (
+            f"SELECT umd_tree_cover_loss__year, "
+            f"SUM(umd_tree_cover_loss__ha) as area_ha, "
+            f"SUM(umd_tree_cover_loss_from_fires__ha) as fire_area_ha "
+            f"FROM data "
+            f"WHERE iso = 'USA' "
+            f"AND adm1 = {adm1} "
+            f"AND adm2 = {adm2} "
+            f"AND umd_tree_cover_density_2000__threshold = {GFW_CANOPY_THRESHOLD} "
+            f"GROUP BY umd_tree_cover_loss__year "
+            f"ORDER BY umd_tree_cover_loss__year"
+        )
 
         try:
             return self.get(endpoint, params={"sql": sql}, headers=self._get_headers())
         except requests.HTTPError as e:
-            if e.response.status_code == 422:
-                logger.warning("GFW API 422 Error for county %s%s: %s. Falling back to mocked data.", state_fips, county_fips, e.response.text)
-                return self._get_mocked_loss_data(state_fips, county_fips)
             logger.error(
-                "GFW API Error county=%s%s status=%s body=%s",
-                state_fips,
+                "GFW API Error county=%s status=%s body=%s",
                 county_fips,
                 e.response.status_code,
                 e.response.text,
@@ -62,22 +82,32 @@ class GFWClient(BaseClient):
             raise
 
     def get_county_tree_cover_baseline(self, state_fips, county_fips):
-        """Fetch baseline tree cover for the year 2000 or 2010."""
+        """
+        Fetch 2010 baseline tree cover extent for a specific US county.
+
+        Uses the pre-aggregated gadm__tcl__adm2_summary dataset which returns
+        total tree cover extent without requiring a spatial geometry parameter.
+        """
         if not self.api_key:
             return self._get_mocked_baseline_data(state_fips, county_fips)
 
-        endpoint = "dataset/umd_tree_cover_density_2010/latest/query"
-        sql = f"SELECT SUM(umd_tree_cover_density_2010__ha) as area_ha FROM data WHERE iso = 'USA' AND adm1 = '{state_fips}' AND adm2 = '{county_fips}'"
+        adm1, adm2 = self._fips_to_gadm(state_fips, county_fips)
+
+        endpoint = "dataset/gadm__tcl__adm2_summary/latest/query"
+        sql = (
+            f"SELECT SUM(umd_tree_cover_extent_2010__ha) as area_ha "
+            f"FROM data "
+            f"WHERE iso = 'USA' "
+            f"AND adm1 = {adm1} "
+            f"AND adm2 = {adm2} "
+            f"AND umd_tree_cover_density_2000__threshold = {GFW_CANOPY_THRESHOLD}"
+        )
 
         try:
             return self.get(endpoint, params={"sql": sql}, headers=self._get_headers())
         except requests.HTTPError as e:
-            if e.response.status_code == 422:
-                logger.warning("GFW API 422 Error for county %s%s: %s. Falling back to mocked data.", state_fips, county_fips, e.response.text)
-                return self._get_mocked_baseline_data(state_fips, county_fips)
             logger.error(
-                "GFW API Error county=%s%s status=%s body=%s",
-                state_fips,
+                "GFW API Error county=%s status=%s body=%s",
                 county_fips,
                 e.response.status_code,
                 e.response.text,
@@ -88,13 +118,13 @@ class GFWClient(BaseClient):
         """Return fake data for local development without an API key."""
         import random
 
-        # Generate random loss data for the last 10 years
         data = []
         for year in range(2013, 2024):
             data.append(
                 {
                     "umd_tree_cover_loss__year": year,
                     "area_ha": round(random.uniform(10.0, 500.0), 2),
+                    "fire_area_ha": round(random.uniform(0.0, 50.0), 2),
                 }
             )
         return {"data": data}

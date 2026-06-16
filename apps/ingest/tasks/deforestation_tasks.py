@@ -57,13 +57,16 @@ def ingest_tree_cover_loss(self, state_fips=None):
                 with transaction.atomic():
                     for record in loss_data["data"]:
                         year = record.get("umd_tree_cover_loss__year")
-                        area_ha = record.get("area_ha", 0)
+                        area_ha = record.get("area_ha", 0) or 0
 
                         # Calculate loss percentage relative to baseline
                         if baseline and baseline.tree_cover_area_ha > 0:
                             loss_percent = (area_ha / float(baseline.tree_cover_area_ha)) * 100
                         else:
                             loss_percent = 0
+
+                        # Map the GFW loss driver category to our primary_driver field
+                        primary_driver = record.get("wri_google_tree_cover_loss_drivers__category") or ""
 
                         TreeCoverLoss.objects.update_or_create(
                             county=county,
@@ -72,6 +75,7 @@ def ingest_tree_cover_loss(self, state_fips=None):
                             defaults={
                                 "loss_area_ha": area_ha,
                                 "loss_percent": loss_percent,
+                                "primary_driver": primary_driver,
                                 "raw_payload": record,
                             },
                         )
