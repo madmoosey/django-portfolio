@@ -79,7 +79,7 @@ export const Dashboard = () => {
                 {lossData.slice(0, 5).map(loss => (
                   <li key={loss.id} className="alert-item">
                     <div className="alert-meta">
-                      <span className="alert-area">County ID: {loss.county} ({loss.year})</span>
+                      <span className="alert-area">{loss.county_name}, {loss.state_abbreviation} ({loss.year})</span>
                       <Badge variant="danger">
                         {loss.loss_area_ha} ha
                       </Badge>

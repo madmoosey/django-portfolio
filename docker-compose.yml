@@ -23,7 +23,7 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db-vol:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arborwatch} -d ${POSTGRES_DB:-arborwatch}" ]
       interval: 5s
@@ -194,7 +194,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  db-vol:
   redis_data:
   static_data:
   media_data:

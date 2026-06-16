@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import Map, { Source, Layer, Popup } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { Card } from '../components/ui/Card';
 import { Loader } from '../components/ui/Loader';
 import api from '../services/api';
@@ -9,6 +9,7 @@ import './MapViewer.css';
 export const MapViewer = () => {
   const [geoData, setGeoData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hoverInfo, setHoverInfo] = useState(null);
 
   useEffect(() => {
     const fetchStates = async () => {
@@ -25,35 +26,44 @@ export const MapViewer = () => {
     fetchStates();
   }, []);
 
-  const styleFeature = (feature) => {
-    return {
-      fillColor: 'transparent',
-      weight: 1,
-      opacity: 1,
-      color: 'rgba(46, 204, 113, 0.5)',
-      fillOpacity: 0.1
-    };
+  const onHover = useCallback(event => {
+    const {
+      features,
+      point: { x, y }
+    } = event;
+    
+    // Check if we're hovering over a feature in the states-layer
+    const hoveredFeature = features && features.find(f => f.layer.id === 'states-layer');
+
+    setHoverInfo(hoveredFeature ? {
+      feature: hoveredFeature,
+      x,
+      y
+    } : null);
+  }, []);
+
+  const onMouseLeave = useCallback(() => {
+    setHoverInfo(null);
+  }, []);
+
+  const layerStyle = {
+    id: 'states-layer',
+    type: 'fill',
+    paint: {
+      'fill-color': 'rgba(46, 204, 113, 0.1)',
+      'fill-outline-color': 'rgba(46, 204, 113, 0.3)'
+    }
   };
 
-  const onEachFeature = (feature, layer) => {
-    if (feature.properties && feature.properties.name) {
-      layer.bindPopup(feature.properties.name);
-    }
-    layer.on({
-      mouseover: (e) => {
-        const layer = e.target;
-        layer.setStyle({
-          fillColor: 'var(--primary)',
-          weight: 2,
-          color: 'var(--accent)',
-          fillOpacity: 0.4
-        });
-      },
-      mouseout: (e) => {
-        const layer = e.target;
-        layer.setStyle(styleFeature(feature));
-      }
-    });
+  const highlightLayerStyle = {
+    id: 'states-highlight-layer',
+    type: 'fill',
+    paint: {
+      'fill-color': 'rgba(46, 204, 113, 0.4)',
+      'fill-outline-color': 'rgba(46, 204, 113, 1)'
+    },
+    // We use the feature id or a unique property to highlight
+    filter: ['==', 'name', hoverInfo?.feature?.properties?.name || '']
   };
 
   if (loading) return <Loader />;
@@ -65,20 +75,32 @@ export const MapViewer = () => {
         <p>Geospatial visualization of states and counties.</p>
       </header>
       
-      <Card className="map-card">
-        <MapContainer center={[39.8283, -98.5795]} zoom={4} className="leaflet-map-container">
-          <TileLayer
-            attribution='&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
-            url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
-          />
+      <Card className="map-card" style={{ padding: 0 }}>
+        <Map
+          initialViewState={{
+            longitude: -98.5795,
+            latitude: 39.8283,
+            zoom: 3.5
+          }}
+          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+          interactiveLayerIds={['states-layer']}
+          onMouseMove={onHover}
+          onMouseLeave={onMouseLeave}
+          style={{ width: '100%', height: '100%', minHeight: '500px' }}
+        >
           {geoData && (
-            <GeoJSON 
-              data={geoData} 
-              style={styleFeature}
-              onEachFeature={onEachFeature}
-            />
+            <Source id="states-source" type="geojson" data={geoData}>
+              <Layer {...layerStyle} />
+              <Layer {...highlightLayerStyle} />
+            </Source>
           )}
-        </MapContainer>
+
+          {hoverInfo && (
+            <div className="map-tooltip" style={{ left: hoverInfo.x, top: hoverInfo.y }}>
+              <strong>{hoverInfo.feature.properties.name}</strong>
+            </div>
+          )}
+        </Map>
       </Card>
     </div>
   );

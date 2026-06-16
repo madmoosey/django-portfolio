@@ -7,32 +7,48 @@
 
 .map-card {
   flex: 1;
-  padding: 0;
+  padding: 0 !important;
   overflow: hidden;
   border-radius: var(--border-radius-lg);
+  position: relative;
 }
 
-.leaflet-map-container {
-  height: 100%;
-  width: 100%;
-  background-color: var(--bg-secondary);
-  border-radius: inherit;
-  z-index: 10;
-}
-
-/* Customizing Leaflet Dark Theme */
-.leaflet-container {
-  font-family: var(--font-family) !important;
-}
-
-.leaflet-popup-content-wrapper {
-  background: var(--bg-input) !important;
-  color: var(--text-primary) !important;
+/* Custom Tooltip for MapLibre */
+.map-tooltip {
+  position: absolute;
+  margin: 10px;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius);
+  font-family: var(--font-family);
+  font-size: 0.875rem;
+  pointer-events: none;
+  z-index: 100;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-glass);
+  transform: translate(-50%, -100%);
+  transition: all 0.1s ease;
 }
 
-.leaflet-popup-tip {
+/* MapLibre Canvas reset if needed */
+.maplibregl-canvas {
+  outline: none !important;
+}
+
+/* Control MapLibre popup styling if we ever use native Popups */
+.maplibregl-popup-content {
   background: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.maplibregl-popup-tip {
+  border-top-color: var(--border-light) !important;
+  border-bottom-color: var(--border-light) !important;
 }

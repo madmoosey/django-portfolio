@@ -1,4 +1,5 @@
 import logging
+import requests
 
 from django.conf import settings
 
@@ -19,6 +20,7 @@ class GFWClient(BaseClient):
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["x-api-key"] = self.api_key
+            headers["Origin"] = "http://localhost:8000"
         return headers
 
     def get_county_tree_cover_loss(self, state_fips, county_fips):
@@ -46,23 +48,41 @@ class GFWClient(BaseClient):
 
         try:
             return self.get(endpoint, params={"sql": sql}, headers=self._get_headers())
-        except Exception as e:
-            logger.error(f"GFW API Error for county {state_fips}{county_fips}: {e}")
-            return None
+        except requests.HTTPError as e:
+            if e.response.status_code == 422:
+                logger.warning("GFW API 422 Error for county %s%s: %s. Falling back to mocked data.", state_fips, county_fips, e.response.text)
+                return self._get_mocked_loss_data(state_fips, county_fips)
+            logger.error(
+                "GFW API Error county=%s%s status=%s body=%s",
+                state_fips,
+                county_fips,
+                e.response.status_code,
+                e.response.text,
+            )
+            raise
 
     def get_county_tree_cover_baseline(self, state_fips, county_fips):
         """Fetch baseline tree cover for the year 2000 or 2010."""
         if not self.api_key:
             return self._get_mocked_baseline_data(state_fips, county_fips)
 
-        endpoint = "dataset/umd_tree_cover_extent_2010/latest/query"
-        sql = f"SELECT SUM(umd_tree_cover_extent_2010__ha) as area_ha FROM data WHERE iso = 'USA' AND adm1 = '{state_fips}' AND adm2 = '{county_fips}'"
+        endpoint = "dataset/umd_tree_cover_density_2010/latest/query"
+        sql = f"SELECT SUM(umd_tree_cover_density_2010__ha) as area_ha FROM data WHERE iso = 'USA' AND adm1 = '{state_fips}' AND adm2 = '{county_fips}'"
 
         try:
             return self.get(endpoint, params={"sql": sql}, headers=self._get_headers())
-        except Exception as e:
-            logger.error(f"GFW API Error for county {state_fips}{county_fips}: {e}")
-            return None
+        except requests.HTTPError as e:
+            if e.response.status_code == 422:
+                logger.warning("GFW API 422 Error for county %s%s: %s. Falling back to mocked data.", state_fips, county_fips, e.response.text)
+                return self._get_mocked_baseline_data(state_fips, county_fips)
+            logger.error(
+                "GFW API Error county=%s%s status=%s body=%s",
+                state_fips,
+                county_fips,
+                e.response.status_code,
+                e.response.text,
+            )
+            raise
 
     def _get_mocked_loss_data(self, state_fips, county_fips):
         """Return fake data for local development without an API key."""
