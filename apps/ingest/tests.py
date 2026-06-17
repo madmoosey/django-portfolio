@@ -1,3 +1,3 @@
-from django.test import TestCase
+# ingest/tests.py
 
 # Create your tests here.

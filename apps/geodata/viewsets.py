@@ -4,16 +4,10 @@ ArborWatch Geodata ViewSets.
 Read-only endpoints returning GeoJSON data for geographic boundaries.
 """
 
-import json
-
 from rest_framework_gis.filters import InBBoxFilter
 from rest_framework_gis.pagination import GeoJsonPagination
 
-from django.contrib.gis.db.models.functions import AsGeoJSON
-from django.db.models import FloatField, Func, IntegerField, OuterRef, Subquery, Value
 from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from rest_framework import viewsets
 from rest_framework.decorators import action
 

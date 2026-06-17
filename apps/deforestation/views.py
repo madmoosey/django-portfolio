@@ -1,3 +1,3 @@
-from django.shortcuts import render
+# deforestation/views.py
 
 # Create your views here.

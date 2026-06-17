@@ -5,7 +5,6 @@ Downloads and ingests US Census Cartographic Boundary Files for States and Count
 Uses Django's LayerMapping for efficient PostGIS insertion.
 """
 
-import os
 import shutil
 import tempfile
 import zipfile

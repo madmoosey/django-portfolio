@@ -7,6 +7,7 @@ Covers: aqi_category(), AirNowClient._category_number(),
 Uses unittest.mock to avoid any real HTTP calls.
 """
 
+from datetime import timezone
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings

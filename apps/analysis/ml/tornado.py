@@ -28,9 +28,44 @@ class TornadoPredictor(RiskPredictor):
     def evaluate(self, X_test, y_test):
         preds = self.model.predict(X_test)
         probs = self.predict(X_test)
-        return {
-            "accuracy": accuracy_score(y_test, preds),
-            "precision": precision_score(y_test, preds, zero_division=0),
-            "recall": recall_score(y_test, preds, zero_division=0),
-            "auc": roc_auc_score(y_test, probs),
+        return {"auc": roc_auc_score(y_test, probs) if len(set(y_test)) > 1 else 0.5}
+
+    @staticmethod
+    def rule_based_score(features: dict) -> tuple:
+        hist = float(features.get("tor_historical_count", 0))
+        recent = float(features.get("tor_recent_count", 0))
+        deaths = float(features.get("tor_deaths", 0))
+        ef = float(features.get("tor_max_ef_score", 0))
+        alerts = float(features.get("tor_extreme_alert_count", 0))
+        days = float(features.get("tor_days_since_last_alert", 90))
+        alley = float(features.get("tor_alley_proximity", 0))
+
+        hist_score = min(hist / 100, 1.0) * 25
+        recent_score = min(recent / 10, 1.0) * 25
+        death_score = min(deaths / 50, 1.0) * 5  # fatalities capped at 50 → 5 pts
+        ef_score = (ef / 5.0) * 20  # EF0-EF5 → 0-20
+        alert_score = min(alerts / 3, 1.0) * 15
+        recency = max(0.0, (90 - days) / 90) * 5
+        alley_bonus = alley * 5
+
+        score = round(
+            min(
+                hist_score
+                + recent_score
+                + death_score
+                + ef_score
+                + alert_score
+                + recency
+                + alley_bonus,
+                100.0,
+            ),
+            2,
+        )
+        return score, {
+            "historical": round(hist_score, 2),
+            "recent_activity": round(recent_score, 2),
+            "fatalities": round(death_score, 2),
+            "ef_rating": round(ef_score, 2),
+            "active_alerts": round(alert_score, 2),
+            "tornado_alley": round(alley_bonus, 2),
         }

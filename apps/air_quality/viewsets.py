@@ -1,9 +1,6 @@
-from rest_framework_gis.pagination import GeoJsonPagination
-
 from django.http import JsonResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 
 from .models import AirQualityObservation
 from .serializers import AirQualityObservationGeoSerializer, AirQualityObservationSerializer

@@ -5,7 +5,6 @@ Allows filtering states and counties by attributes and spatial bounding boxes.
 """
 
 import django_filters
-from rest_framework_gis.filters import InBBoxFilter
 
 from apps.geodata.models import County, State
 

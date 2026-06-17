@@ -5,6 +5,8 @@ DEBUG enabled, console email, django-debug-toolbar, relaxed security.
 Usage: DJANGO_SETTINGS_MODULE=config.settings.local
 """
 
+import socket
+
 from .base import *  # noqa: F401, F403
 
 # =============================================================================
@@ -37,8 +39,6 @@ except ImportError:
 INTERNAL_IPS = ["127.0.0.1", "0.0.0.0"]
 
 # Docker-specific: allow debug toolbar when behind Docker network
-import socket
-
 hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
 INTERNAL_IPS += [".".join(ip.split(".")[:-1] + ["1"]) for ip in ips]
 

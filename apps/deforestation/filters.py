@@ -1,6 +1,6 @@
 from django_filters import rest_framework as filters
 
-from .models import DeforestationAlert, TreeCoverBaseline, TreeCoverLoss
+from .models import DeforestationAlert, TreeCoverLoss
 
 
 class TreeCoverLossFilter(filters.FilterSet):

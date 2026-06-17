@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import NotFound
 
 from apps.api.exceptions import custom_exception_handler
 from apps.api.permissions import CanTriggerRecompute, IsAdminOrReadOnly

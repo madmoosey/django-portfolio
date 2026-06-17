@@ -8,6 +8,7 @@ and configures queue routing for task segregation.
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import setup_logging
 
 # Set the default Django settings module for the 'celery' program.
@@ -35,8 +36,6 @@ app.conf.include = [
 
 # Also run autodiscover for any other apps that define tasks.py at the top level.
 app.autodiscover_tasks()
-
-from celery.schedules import crontab
 
 app.conf.beat_schedule = {
     "ingest-tree-cover-loss-weekly": {

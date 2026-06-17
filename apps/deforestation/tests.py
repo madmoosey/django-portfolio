@@ -1,3 +1,3 @@
-from django.test import TestCase
+# deforestation/tests.py
 
 # Create your tests here.

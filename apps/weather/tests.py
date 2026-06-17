@@ -1,3 +1,3 @@
-from django.test import TestCase
+# weather/tests.py
 
 # Create your tests here.

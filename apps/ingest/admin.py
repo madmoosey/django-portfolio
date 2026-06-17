@@ -1,3 +1,3 @@
-from django.contrib import admin
+# ingest/admin.py
 
 # Register your models here.

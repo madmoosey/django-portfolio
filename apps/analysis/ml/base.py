@@ -1,9 +1,5 @@
 import abc
 
-import numpy as np
-import pandas as pd
-import xgboost as xgb
-
 
 class RiskPredictor(abc.ABC):
     """Abstract base class for ML risk predictors."""
