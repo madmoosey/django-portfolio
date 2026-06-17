@@ -1,18 +1,18 @@
 """
 Tests for apps.ingest.clients.airnow_client.
 
-Covers: aqi_category(), AirNowClient._category_number(),
-        AirNowClient.get_current_observations() — no-key early return,
-        null/non-list response guards, and normalisation logic.
-Uses unittest.mock to avoid any real HTTP calls.
+Covers: aqi_category(), _local_to_utc(), and AirNowClient.get_current_observations()
+guard paths + field normalisation.  No real HTTP calls — network is patched.
 """
 
 from datetime import timezone
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+import requests
 
-from apps.ingest.clients.airnow_client import AirNowClient, aqi_category
+from django.test import TestCase
+
+from apps.ingest.clients.airnow_client import AirNowClient, _local_to_utc, aqi_category
 
 
 class TestAqiCategory(TestCase):
@@ -44,80 +44,38 @@ class TestAqiCategory(TestCase):
         self.assertEqual(aqi_category(999), "Hazardous")
 
 
-class TestAirNowClientCategoryNumber(TestCase):
-    """_category_number() maps category name strings to EPA numbers 1-6."""
+class TestLocalToUtc(TestCase):
+    """_local_to_utc() parses flat-file timestamps properly."""
 
-    def setUp(self):
-        with override_settings(AIRNOW_API_KEY="test-key-1234"):
-            self.client = AirNowClient()
+    def test_valid_parsing(self):
+        utc = _local_to_utc("06/16/26", "14:00", "PDT")
+        self.assertIsNotNone(utc)
+        self.assertEqual(utc.hour, 21)  # PDT is UTC-7, so 14+7 = 21
 
-    def test_known_categories(self):
-        cases = [
-            ("Good", 1),
-            ("Moderate", 2),
-            ("Unhealthy for Sensitive Groups", 3),
-            ("Unhealthy", 4),
-            ("Very Unhealthy", 5),
-            ("Hazardous", 6),
-        ]
-        for name, expected in cases:
-            with self.subTest(name=name):
-                self.assertEqual(self.client._category_number(name), expected)
-
-    def test_unknown_returns_zero(self):
-        self.assertEqual(self.client._category_number("Unknown"), 0)
-        self.assertEqual(self.client._category_number(""), 0)
+    def test_invalid_parsing(self):
+        self.assertIsNone(_local_to_utc("bad", "time", "PDT"))
 
 
 class TestAirNowClientGetCurrentObservations(TestCase):
     """get_current_observations() response handling."""
 
-    @override_settings(AIRNOW_API_KEY="")
-    def test_returns_empty_list_when_no_api_key(self):
-        client = AirNowClient()
-        result = client.get_current_observations()
-        self.assertEqual(result, [])
+    def setUp(self):
+        self.client = AirNowClient()
 
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_returns_empty_list_on_null_response(self):
-        client = AirNowClient()
-        with patch.object(client, "get", return_value=None):
-            result = client.get_current_observations()
-        self.assertEqual(result, [])
+    @patch("apps.ingest.clients.airnow_client.requests.Session.get")
+    def test_raises_on_request_exception(self, mock_get):
+        mock_get.side_effect = requests.RequestException("Network error")
+        with self.assertRaises(requests.RequestException):
+            self.client.get_current_observations()
 
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_returns_empty_list_on_non_list_response(self):
-        client = AirNowClient()
-        with patch.object(client, "get", return_value={"error": "bad"}):
-            result = client.get_current_observations()
-        self.assertEqual(result, [])
+    @patch("apps.ingest.clients.airnow_client.requests.Session.get")
+    def test_normalises_flat_file_format(self, mock_get):
+        """Flat file format is correctly parsed into normalised dicts."""
+        mock_resp = MagicMock()
+        mock_resp.content = b"06/16/26|06/16/26|14:00|PDT|0|O|Y|Los Angeles|CA|34.05|-118.24|PM2.5|120|Unhealthy for Sensitive Groups|No||Agency\n"
+        mock_get.return_value = mock_resp
 
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_returns_empty_list_on_value_error(self):
-        """ValueError from base client (non-JSON body) → graceful empty return."""
-        client = AirNowClient()
-        with patch.object(client, "get", side_effect=ValueError("Non-JSON response")):
-            result = client.get_current_observations()
-        self.assertEqual(result, [])
-
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_normalises_response_fields(self):
-        """camelCase API response is normalised to the expected PascalCase shape."""
-        raw = [
-            {
-                "reportingAreaName": "Los Angeles",
-                "reportingAreaCode": "ca084",
-                "nowcastAQI": 120,
-                "AQICategoryName": "Unhealthy for Sensitive Groups",
-                "parameterName": "PM2.5",
-                "dateObserved": "06/16/2026",
-                "hourObserved": 14,
-                "localTimeZone": "PDT",
-            }
-        ]
-        client = AirNowClient()
-        with patch.object(client, "get", return_value=raw):
-            result = client.get_current_observations()
+        result = self.client.get_current_observations()
 
         self.assertEqual(len(result), 1)
         obs = result[0]
@@ -127,5 +85,26 @@ class TestAirNowClientGetCurrentObservations(TestCase):
         self.assertEqual(obs["ParameterName"], "PM2.5")
         self.assertEqual(obs["Category"]["Number"], 3)
         self.assertEqual(obs["Category"]["Name"], "Unhealthy for Sensitive Groups")
-        self.assertIsNone(obs["Latitude"])
-        self.assertIsNone(obs["Longitude"])
+        self.assertEqual(obs["Latitude"], 34.05)
+        self.assertEqual(obs["Longitude"], -118.24)
+
+    @patch("apps.ingest.clients.airnow_client.requests.Session.get")
+    def test_ignores_non_current_or_forecast_rows(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.content = b"""06/16/26|06/16/26|14:00|PDT|1|O|Y|Future|CA|0|0|PM2.5|120|Good|No||Agency
+06/16/26|06/16/26|14:00|PDT|0|F|Y|Forecast|CA|0|0|PM2.5|120|Good|No||Agency
+06/16/26|06/16/26|14:00|PDT|0|O|N|Secondary|CA|0|0|PM2.5|120|Good|No||Agency
+"""
+        mock_get.return_value = mock_resp
+
+        result = self.client.get_current_observations()
+        self.assertEqual(len(result), 0)
+
+    @patch("apps.ingest.clients.airnow_client.requests.Session.get")
+    def test_missing_or_bad_aqi(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.content = b"06/16/26|06/16/26|14:00|PDT|0|O|Y|Los Angeles|CA|34.05|-118.24|PM2.5|-1|Good|No||Agency\n"
+        mock_get.return_value = mock_resp
+
+        result = self.client.get_current_observations()
+        self.assertEqual(len(result), 0)
