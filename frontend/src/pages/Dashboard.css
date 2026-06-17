@@ -94,18 +94,19 @@
 .accordion-body {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.22s ease;
-  overflow: hidden;
+  transition: grid-template-rows 0.25s ease;
 }
 
 .accordion-body.is-open {
   grid-template-rows: 1fr;
 }
 
-/* The inner div must have no min-height for grid animation to work */
-.accordion-body > .card-content {
-  min-height: 0;
+/* The grid child must have overflow:hidden + min-height:0 for the
+   0fr → 1fr trick to work. Padding lives on the inner wrapper so the
+   collapsed state clips to exactly 0px with no sliver. */
+.accordion-body-inner {
   overflow: hidden;
+  min-height: 0;
 }
 
 /* ── Card content ── */
@@ -174,6 +175,23 @@
   color: var(--text-primary);
   font-size: 0.92rem;
   line-height: 1.3;
+}
+
+/* Two-line location block: area name + state · county · time */
+.alert-area-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.alert-subarea {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .alert-event {

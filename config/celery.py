@@ -76,6 +76,13 @@ app.conf.beat_schedule = {
         "task": "apps.geodata.tasks.build_choropleth_geometry",
         "schedule": crontab(day_of_week="sun", hour=3, minute=0),
     },
+    # Environmental ML risk predictions — daily so the map layer stays fresh.
+    # Phase 1 (rule-based) starts immediately; Phase 2 (XGBoost) activates
+    # automatically after 30 days of accumulated FeatureSnapshot history.
+    "predict-environmental-risks-daily": {
+        "task": "apps.ingest.tasks.analysis_tasks.predict_environmental_risks",
+        "schedule": crontab(hour=6, minute=30),
+    },
 }
 
 

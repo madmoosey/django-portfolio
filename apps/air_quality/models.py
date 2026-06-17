@@ -80,6 +80,21 @@ class AirQualityObservation(BaseModel):
         verbose_name = "Air Quality Observation"
         verbose_name_plural = "Air Quality Observations"
 
+    def save(self, *args, **kwargs):
+        """Auto-derive the PostGIS location from latitude/longitude.
+
+        Keeps the PointField in sync without requiring callers to construct
+        a Point() object explicitly — any code that sets latitude + longitude
+        gets the spatial geometry for free.
+        """
+        from django.contrib.gis.geos import Point
+
+        if self.latitude is not None and self.longitude is not None:
+            self.location = Point(float(self.longitude), float(self.latitude), srid=4326)
+        else:
+            self.location = None
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return (
             f"[{self.aqi_category}] {self.reporting_area} "
