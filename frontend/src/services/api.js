@@ -56,4 +56,28 @@ export const fetchAlertsGeoJSON = async () => {
   };
 };
 
+/**
+ * Fetch all 6 ML risk prediction layers in one request.
+ * Returns { layers: { air_quality, severe_weather, hurricane, tornado, heat_wave, wildfire }, min_score }
+ *
+ * @param {number} [minScore=40] - Only Moderate (40+) and above by default
+ */
+export const fetchRiskPredictionsBatch = async (minScore = 40) => {
+  const response = await api.get(
+    `/analysis/risk-scores/predictions-geojson-batch/?min_score=${minScore}`
+  );
+  return response.data;
+};
+
+/**
+ * Fetch ML risk prediction GeoJSON for a single risk type (kept for compatibility).
+ * @deprecated Use fetchRiskPredictionsBatch instead.
+ */
+export const fetchRiskPredictionsGeoJSON = async (riskType, minScore = 40) => {
+  const response = await api.get(
+    `/analysis/risk-scores/predictions-geojson/?risk_type=${riskType}&min_score=${minScore}`
+  );
+  return response.data;
+};
+
 export default api;

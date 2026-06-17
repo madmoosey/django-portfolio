@@ -1,34 +1,77 @@
 """
-AirNow client — ObservationsByReportingArea endpoint.
+AirNow client — hourly public reporting-area flat-file feed.
 
-Base URL: https://www.airnowapi.org/aq/observation/current/racode
+Source:
+    https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/today/reportingarea.dat
 
-Parameters:
-    reportingAreaCode  optional  — omit to get all US reporting areas
-    format             required  — application/json
-    API_KEY            required
+No API key required.  The file is updated every hour and covers all US
+reporting areas.  It is pipe-delimited (17 fields) and uses 2-digit years.
 
-Response fields (camelCase):
-    dateObserved         str  — MM/DD/YYYY
-    hourObserved         int  — 0-23 local time
-    localTimeZone        str  — e.g. 'EDT'
-    reportingAreaName    str  — city/area name
-    reportingAreaAgency  str  — monitoring agency
-    reportingAreaCode    str  — e.g. 'ca084'
-    nowcastAQI           int  — observed AQI value
-    AQICategoryName      str  — Good / Moderate / Unhealthy … / Hazardous
-    parameterName        str  — OZONE / PM2.5 / PM10 / CO / NO2
+Field layout:
+    0  IssueDate     MM/DD/YY
+    1  ObsDate       MM/DD/YY
+    2  ObsTime       HH:MM  (local)
+    3  TZ            EDT / CDT / MDT / PDT / AKDT / HST …
+    4  hoursOffset   0 = current obs; <0 = historical; >0 = forecast
+    5  RecType       O = observation  F = forecast
+    6  isPrimary     Y = primary pollutant for this area  N = secondary
+    7  ReportingArea city/area name
+    8  StateCode     2-char abbreviation
+    9  Latitude      float
+    10 Longitude     float
+    11 ParameterName PM2.5 / PM10 / OZONE / CO / NO2 / SO2
+    12 AQI           integer  (-1 = unavailable)
+    13 AQICategory   Good / Moderate / Unhealthy for Sensitive Groups / …
+    14 ActionDay     Yes / No
+    15 Discussion    (often blank)
+    16 Agency
+
+get_current_observations() normalises each row to the same PascalCase dict
+shape expected by apps.ingest.tasks.air_quality_tasks, so that task is
+unchanged.
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 
-from django.conf import settings
-
-from .base import BaseClient
+import requests
 
 logger = logging.getLogger(__name__)
 
-# AQI categories per EPA breakpoints
+_FEED_URL = (
+    "https://s3-us-west-1.amazonaws.com" "/files.airnowtech.org/airnow/today/reportingarea.dat"
+)
+
+# Mapping from AirNow abbreviated timezone name → UTC offset hours.
+# AirNow only emits the standard/daylight variants for the major US zones.
+_TZ_OFFSETS: dict[str, int] = {
+    "EST": -5,
+    "EDT": -4,
+    "CST": -6,
+    "CDT": -5,
+    "MST": -7,
+    "MDT": -6,
+    "PST": -8,
+    "PDT": -7,
+    "AKST": -9,
+    "AKDT": -8,
+    "HST": -10,
+    "HAST": -10,
+    "AST": -4,
+    "ChST": 10,  # Guam / Northern Mariana Islands
+}
+
+# AQI category name → EPA number (1–6)
+_CATEGORY_NUMBERS: dict[str, int] = {
+    "good": 1,
+    "moderate": 2,
+    "unhealthy for sensitive groups": 3,
+    "unhealthy": 4,
+    "very unhealthy": 5,
+    "hazardous": 6,
+}
+
+# AQI categories by breakpoint for fallback computation
 _AQI_CATEGORIES = [
     (50, "Good"),
     (100, "Moderate"),
@@ -47,135 +90,146 @@ def aqi_category(aqi_value: int) -> str:
     return "Hazardous"
 
 
-class AirNowClient(BaseClient):
+def _local_to_utc(date_str: str, time_str: str, tz_abbr: str) -> datetime | None:
     """
-    Client for the EPA AirNow ObservationsByReportingArea endpoint.
+    Convert a flat-file local datetime (MM/DD/YY HH:MM <TZ>) to UTC.
 
-    Endpoint: GET /aq/observation/current/racode
-    Docs:     https://docs.airnowapi.org/ObservationsByReportingArea/docs
+    Returns a timezone-aware datetime or None on any parse error.
+    """
+    try:
+        # 2-digit year: strptime %y maps 00-68 → 2000-2068, 69-99 → 1969-1999
+        naive = datetime.strptime(f"{date_str.strip()} {time_str.strip()}", "%m/%d/%y %H:%M")
+    except ValueError:
+        return None
 
-    Omitting reportingAreaCode returns observations for all US reporting areas.
-    Requires a valid AIRNOW_API_KEY in Django settings.
+    offset_hours = _TZ_OFFSETS.get(tz_abbr.strip(), 0)  # assume UTC if unknown
+    utc_offset = timezone(timedelta(hours=offset_hours))
+    local_aware = naive.replace(tzinfo=utc_offset)
+    return local_aware.astimezone(timezone.utc)
+
+
+class AirNowClient:
+    """
+    Fetches the hourly AirNow reporting-area flat-file and returns a
+    normalised list of observation dicts.
+
+    The flat-file contains one row per (reporting_area, pollutant).
+    We keep only:
+      - RecType == 'O'         (observations, not forecasts)
+      - hoursOffset == '0'     (current hour, not historical/future)
+      - isPrimary == 'Y'       (dominant pollutant per area)
+
+    No API key is required; the file is publicly available on S3.
     """
 
-    AIRNOW_BASE_URL = "https://www.airnowapi.org"
+    # Kept for backward-compat with the task's `if not client.api_key` guard
+    api_key: str = "flat-file"
 
     def __init__(self):
-        super().__init__(base_url=self.AIRNOW_BASE_URL)
-        # Strip whitespace/newlines — .env values sometimes include trailing \n
-        raw_key = getattr(settings, "AIRNOW_API_KEY", None) or ""
-        self.api_key = raw_key.strip()
+        self._session = requests.Session()
 
-    def _base_params(self):
-        return {"format": "application/json", "API_KEY": self.api_key}
-
-    def get_current_observations(self, reporting_area_code: str = None) -> list[dict]:
+    def get_current_observations(self) -> list[dict]:
         """
-        Fetch current AQI observations from the AirNow reporting-area endpoint.
+        Download the hourly flat-file and return normalised observation dicts.
 
-        When *reporting_area_code* is omitted the API returns observations for
-        all US reporting areas in a single response.
+        Each dict has the same keys the ingest task expects:
+            ReportingArea, StateCode, Latitude, Longitude,
+            DateObserved (YYYY-MM-DD), HourObserved (0-23 UTC),
+            LocalTimeZone, ParameterName,
+            AQI (int), Category {'Number': int, 'Name': str}
 
-        The raw response uses camelCase field names.  This method normalises
-        them to the PascalCase/nested shape the ingest task already expects,
-        so no changes are required downstream:
-
-            ReportingArea  ← reportingAreaName
-            StateCode      ← derived from reportingAreaCode (first two chars)
-            Latitude       ← (not in response; set to None)
-            Longitude      ← (not in response; set to None)
-            DateObserved   ← dateObserved
-            HourObserved   ← hourObserved
-            LocalTimeZone  ← localTimeZone
-            ParameterName  ← parameterName
-            AQI            ← nowcastAQI
-            Category       ← {Number, Name} from AQICategoryName
-
-        Returns [] if the API key is absent, the request fails, or the
-        response is not a JSON array.
+        Returns [] on any network or parse error.
         """
-        if not self.api_key:
-            logger.warning(
-                "AIRNOW_API_KEY is not configured. "
-                "Register at https://docs.airnowapi.org/account/request."
-            )
-            return []
-
-        masked = self.api_key[:4] + "****" + self.api_key[-4:] if len(self.api_key) > 8 else "****"
-        logger.info(f"AirNow request: key={masked} (len={len(self.api_key)})")
-
-        self.base_url = self.AIRNOW_BASE_URL
-        params = {**self._base_params()}
-        if reporting_area_code:
-            params["reportingAreaCode"] = reporting_area_code
+        logger.info("Fetching AirNow flat-file feed: %s", _FEED_URL)
 
         try:
-            result = self.get("aq/observation/current/racode", params=params)
-        except ValueError as exc:
-            # Non-JSON body — likely an HTML error page from a bad/missing key
-            logger.warning(f"AirNow returned a non-JSON response — skipping: {exc}")
-            return []
-        except Exception as exc:
-            logger.error(f"AirNow API error: {exc}")
+            resp = self._session.get(_FEED_URL, timeout=30)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            logger.error("AirNow flat-file download failed: %s", exc)
             raise
 
-        if result is None:
-            logger.info("AirNow returned null — no observations available this hour.")
-            return []
+        raw_text = resp.content.decode("latin-1")  # file uses latin-1 encoding
+        lines = raw_text.splitlines()
+        logger.info("Flat-file: %d raw lines downloaded.", len(lines))
 
-        if not isinstance(result, list):
-            preview = repr(result)[:200]
-            logger.warning(f"Unexpected AirNow response type: {type(result)} — {preview}")
-            return []
+        observations: list[dict] = []
 
-        # Normalise camelCase → expected shape so ingest task is unchanged
-        normalised = []
-        for rec in result:
-            aqi_val = rec.get("nowcastAQI")
-            cat_name = (rec.get("AQICategoryName") or "").strip()
-            ra_code = (rec.get("reportingAreaCode") or "").strip()
+        for lineno, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line:
+                continue
 
-            # AirNow state codes are the first two chars of the area code (e.g. 'ca084' → 'ca')
-            # but the response may not include a dedicated state field — derive it from racode
-            # or fall back to blank; the ingest task will gracefully handle a missing state.
-            state_code = ra_code[:2].upper() if len(ra_code) >= 2 else ""
+            parts = line.split("|")
+            if len(parts) < 14:
+                logger.debug("Line %d skipped: only %d fields", lineno, len(parts))
+                continue
 
-            normalised.append(
+            # ── Filter: current observations only ──────────────────────────
+            rec_type = parts[5].strip()  # 'O' or 'F'
+            hours_offset = parts[4].strip()  # '0' = current hour
+            is_primary = parts[6].strip()  # 'Y' = primary pollutant
+
+            if rec_type != "O" or hours_offset != "0" or is_primary != "Y":
+                continue
+
+            # ── Parse AQI ──────────────────────────────────────────────────
+            try:
+                aqi_val = int(parts[12].strip())
+            except (ValueError, IndexError):
+                continue
+
+            if aqi_val < 0:
+                continue  # -1 = sensor unavailable
+
+            # ── Parse coords ───────────────────────────────────────────────
+            try:
+                lat = float(parts[9].strip())
+                lon = float(parts[10].strip())
+            except (ValueError, IndexError):
+                lat = lon = None
+
+            # ── Parse datetime → UTC ───────────────────────────────────────
+            obs_date = parts[1].strip()  # MM/DD/YY
+            obs_time = parts[2].strip()  # HH:MM
+            tz_abbr = parts[3].strip()  # EDT / CDT / …
+
+            observed_utc = _local_to_utc(obs_date, obs_time, tz_abbr)
+            if observed_utc is None:
+                logger.debug(
+                    "Line %d: could not parse datetime '%s %s %s'",
+                    lineno,
+                    obs_date,
+                    obs_time,
+                    tz_abbr,
+                )
+                continue
+
+            # ── Category ───────────────────────────────────────────────────
+            cat_name = parts[13].strip() if len(parts) > 13 else aqi_category(aqi_val)
+            cat_number = _CATEGORY_NUMBERS.get(cat_name.lower(), 0)
+
+            observations.append(
                 {
-                    "ReportingArea": (rec.get("reportingAreaName") or "").strip(),
-                    "StateCode": state_code,
-                    # Lat/lon not included in this endpoint's response
-                    "Latitude": None,
-                    "Longitude": None,
-                    "DateObserved": (rec.get("dateObserved") or "").strip(),
-                    "HourObserved": rec.get("hourObserved"),
-                    "LocalTimeZone": (rec.get("localTimeZone") or "").strip(),
-                    "ParameterName": (rec.get("parameterName") or "").strip(),
+                    "ReportingArea": parts[7].strip(),
+                    "StateCode": parts[8].strip().upper(),
+                    "Latitude": lat,
+                    "Longitude": lon,
+                    # Normalised to YYYY-MM-DD so _parse_observed_at in the task works
+                    "DateObserved": observed_utc.strftime("%Y-%m-%d"),
+                    "HourObserved": observed_utc.hour,
+                    "LocalTimeZone": tz_abbr,
+                    "ParameterName": parts[11].strip(),
                     "AQI": aqi_val,
                     "Category": {
-                        "Number": self._category_number(cat_name),
+                        "Number": cat_number,
                         "Name": cat_name,
                     },
-                    # Pass through raw code for debugging
-                    "_reportingAreaCode": ra_code,
                 }
             )
 
         logger.info(
-            f"AirNow returned {len(normalised)} observations "
-            f"({'all areas' if not reporting_area_code else reporting_area_code})."
+            "Flat-file parsed: %d current primary observations returned.",
+            len(observations),
         )
-        return normalised
-
-    @staticmethod
-    def _category_number(name: str) -> int:
-        """Map AQI category name to its EPA number (1–6)."""
-        _MAP = {
-            "good": 1,
-            "moderate": 2,
-            "unhealthy for sensitive groups": 3,
-            "unhealthy": 4,
-            "very unhealthy": 5,
-            "hazardous": 6,
-        }
-        return _MAP.get(name.lower(), 0)
+        return observations

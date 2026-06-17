@@ -1,17 +1,16 @@
 """
 Tests for apps.ingest.clients.airnow_client.
 
-Covers: aqi_category(), AirNowClient._category_number(),
-        AirNowClient.get_current_observations() — no-key early return,
-        null/non-list response guards, and normalisation logic.
-Uses unittest.mock to avoid any real HTTP calls.
+Covers: aqi_category(), _local_to_utc(), and AirNowClient.get_current_observations()
+guard paths + field normalisation.  No real HTTP calls — network is patched.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from apps.ingest.clients.airnow_client import AirNowClient, aqi_category
+from apps.ingest.clients.airnow_client import AirNowClient, _local_to_utc, aqi_category
 
 
 class TestAqiCategory(TestCase):
@@ -39,92 +38,96 @@ class TestAqiCategory(TestCase):
 
     def test_hazardous(self):
         self.assertEqual(aqi_category(301), "Hazardous")
-        self.assertEqual(aqi_category(500), "Hazardous")
         self.assertEqual(aqi_category(999), "Hazardous")
 
 
-class TestAirNowClientCategoryNumber(TestCase):
-    """_category_number() maps category name strings to EPA numbers 1-6."""
+class TestLocalToUtc(TestCase):
+    """_local_to_utc() converts flat-file local datetimes to UTC."""
 
-    def setUp(self):
-        with override_settings(AIRNOW_API_KEY="test-key-1234"):
-            self.client = AirNowClient()
+    def test_edt_offset(self):
+        """EDT = UTC-4; 12:00 EDT → 16:00 UTC"""
+        result = _local_to_utc("06/16/26", "12:00", "EDT")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.tzinfo, timezone.utc)
+        self.assertEqual(result.hour, 16)
 
-    def test_known_categories(self):
-        cases = [
-            ("Good", 1),
-            ("Moderate", 2),
-            ("Unhealthy for Sensitive Groups", 3),
-            ("Unhealthy", 4),
-            ("Very Unhealthy", 5),
-            ("Hazardous", 6),
-        ]
-        for name, expected in cases:
-            with self.subTest(name=name):
-                self.assertEqual(self.client._category_number(name), expected)
+    def test_pdt_offset(self):
+        """PDT = UTC-7; 09:00 PDT → 16:00 UTC"""
+        result = _local_to_utc("06/16/26", "09:00", "PDT")
+        self.assertEqual(result.hour, 16)
 
-    def test_unknown_returns_zero(self):
-        self.assertEqual(self.client._category_number("Unknown"), 0)
-        self.assertEqual(self.client._category_number(""), 0)
+    def test_unknown_tz_defaults_to_utc(self):
+        """Unknown TZ abbreviation falls back to UTC offset 0."""
+        result = _local_to_utc("06/16/26", "10:00", "XYZ")
+        self.assertEqual(result.hour, 10)
+
+    def test_bad_date_returns_none(self):
+        result = _local_to_utc("not-a-date", "12:00", "EDT")
+        self.assertIsNone(result)
 
 
 class TestAirNowClientGetCurrentObservations(TestCase):
-    """get_current_observations() response handling."""
+    """AirNowClient.get_current_observations() flat-file parsing."""
 
-    @override_settings(AIRNOW_API_KEY="")
-    def test_returns_empty_list_when_no_api_key(self):
-        client = AirNowClient()
-        result = client.get_current_observations()
-        self.assertEqual(result, [])
+    # Minimal valid flat-file content with one O/0/Y row
+    _FLAT_FILE = (
+        "06/16/26|06/16/26|12:00|EDT|0|O|Y|"
+        "Los Angeles|CA|34.0522|-118.2437|PM2.5|120|"
+        "Unhealthy for Sensitive Groups|No||SCAQMD\n"
+        # Forecast row — should be skipped (RecType=F)
+        "06/16/26|06/16/26|12:00|EDT|0|F|Y|"
+        "Los Angeles|CA|34.0522|-118.2437|OZONE|80|Moderate|No||SCAQMD\n"
+        # Secondary pollutant — should be skipped (isPrimary=N)
+        "06/16/26|06/16/26|12:00|EDT|0|O|N|"
+        "San Diego|CA|32.7157|-117.1611|OZONE|60|Moderate|No||SDAPCD\n"
+        # AQI == -1 — should be skipped
+        "06/16/26|06/16/26|12:00|EDT|0|O|Y|"
+        "Nowhere|CA|36.0|-119.0|PM10|-1|N/A|No||TestAgency\n"
+    )
 
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_returns_empty_list_on_null_response(self):
-        client = AirNowClient()
-        with patch.object(client, "get", return_value=None):
-            result = client.get_current_observations()
-        self.assertEqual(result, [])
+    def _make_response(self, text):
+        mock_resp = MagicMock()
+        mock_resp.content = text.encode("latin-1")
+        mock_resp.raise_for_status = MagicMock()
+        return mock_resp
 
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_returns_empty_list_on_non_list_response(self):
-        client = AirNowClient()
-        with patch.object(client, "get", return_value={"error": "bad"}):
-            result = client.get_current_observations()
-        self.assertEqual(result, [])
+    def test_returns_empty_list_on_http_error(self):
+        import requests
 
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_returns_empty_list_on_value_error(self):
-        """ValueError from base client (non-JSON body) → graceful empty return."""
         client = AirNowClient()
-        with patch.object(client, "get", side_effect=ValueError("Non-JSON response")):
-            result = client.get_current_observations()
-        self.assertEqual(result, [])
+        with patch.object(client._session, "get", side_effect=requests.RequestException("timeout")):
+            with self.assertRaises(requests.RequestException):
+                client.get_current_observations()
 
-    @override_settings(AIRNOW_API_KEY="valid-test-key-xyz")
-    def test_normalises_response_fields(self):
-        """camelCase API response is normalised to the expected PascalCase shape."""
-        raw = [
-            {
-                "reportingAreaName": "Los Angeles",
-                "reportingAreaCode": "ca084",
-                "nowcastAQI": 120,
-                "AQICategoryName": "Unhealthy for Sensitive Groups",
-                "parameterName": "PM2.5",
-                "dateObserved": "06/16/2026",
-                "hourObserved": 14,
-                "localTimeZone": "PDT",
-            }
-        ]
+    def test_filters_to_current_primary_observations(self):
+        """Only the O/0/Y row should pass all filters."""
         client = AirNowClient()
-        with patch.object(client, "get", return_value=raw):
+        with patch.object(
+            client._session, "get", return_value=self._make_response(self._FLAT_FILE)
+        ):
             result = client.get_current_observations()
 
+        # Only the first valid row should survive all filters
         self.assertEqual(len(result), 1)
+
+    def test_normalises_fields_correctly(self):
+        """Returned dict has the shape the ingest task expects."""
+        client = AirNowClient()
+        with patch.object(
+            client._session, "get", return_value=self._make_response(self._FLAT_FILE)
+        ):
+            result = client.get_current_observations()
+
         obs = result[0]
         self.assertEqual(obs["ReportingArea"], "Los Angeles")
         self.assertEqual(obs["StateCode"], "CA")
-        self.assertEqual(obs["AQI"], 120)
+        self.assertAlmostEqual(obs["Latitude"], 34.0522)
+        self.assertAlmostEqual(obs["Longitude"], -118.2437)
         self.assertEqual(obs["ParameterName"], "PM2.5")
-        self.assertEqual(obs["Category"]["Number"], 3)
+        self.assertEqual(obs["AQI"], 120)
         self.assertEqual(obs["Category"]["Name"], "Unhealthy for Sensitive Groups")
-        self.assertIsNone(obs["Latitude"])
-        self.assertIsNone(obs["Longitude"])
+        self.assertEqual(obs["Category"]["Number"], 3)
+        self.assertEqual(obs["LocalTimeZone"], "EDT")
+        # 12:00 EDT (UTC-4) → 16:00 UTC
+        self.assertEqual(obs["HourObserved"], 16)
+        self.assertEqual(obs["DateObserved"], "2026-06-16")

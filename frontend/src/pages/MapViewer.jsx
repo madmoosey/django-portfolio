@@ -6,6 +6,7 @@ import {
   fetchAirQualityGeoJSON,
   fetchAlertsGeoJSON,
   fetchChoroplethCounties,
+  fetchRiskPredictionsBatch,
 } from '../services/api';
 import './MapViewer.css';
 
@@ -72,23 +73,41 @@ const fmtDate = (iso) => {
   catch { return iso; }
 };
 
+/** Risk score (0-100) → circle colour for prediction layers (Moderate+ only shown) */
+const RISK_COLOR_EXPR = [
+  'step', ['get', 'score'],
+  '#facc15', // 40-59 moderate  yellow
+  60, '#f97316', // 60-79 elevated  orange
+  80, '#ef4444', // 80+   high      red
+];
+
+/** Risk score → circle radius */
+const RISK_RADIUS_EXPR = [
+  'interpolate', ['linear'], ['get', 'score'],
+  0,   4,
+  50,  7,
+  100, 11,
+];
+
 // ---------------------------------------------------------------------------
 // Layer style objects
 // ---------------------------------------------------------------------------
 
-const deforestationFill = {
+const deforestationFill = (visible) => ({
   id: 'deforestation-fill',
   type: 'fill',
   source: 'county-loss',
+  layout: { visibility: visible ? 'visible' : 'none' },
   paint: { 'fill-color': LOSS_COLOR_EXPR },
-};
+});
 
-const deforestationLine = {
+const deforestationLine = (visible) => ({
   id: 'deforestation-line',
   type: 'line',
   source: 'county-loss',
+  layout: { visibility: visible ? 'visible' : 'none' },
   paint: { 'line-color': 'rgba(46, 204, 113, 0.15)', 'line-width': 0.4 },
-};
+});
 
 const aqCircles = (visible) => ({
   id: 'aq-circles',
@@ -110,6 +129,20 @@ const alertsFill = (visible) => ({
   source: 'alerts-polygons',
   layout: { visibility: visible ? 'visible' : 'none' },
   paint: { 'fill-color': ALERT_COLOR_EXPR },
+});
+
+const riskLayer = (id, source, visible) => ({
+  id,
+  type: 'circle',
+  source,
+  layout: { visibility: visible ? 'visible' : 'none' },
+  paint: {
+    'circle-color': RISK_COLOR_EXPR,
+    'circle-radius': RISK_RADIUS_EXPR,
+    'circle-stroke-width': 1,
+    'circle-stroke-color': 'rgba(255,255,255,0.2)',
+    'circle-opacity': 0.8,
+  },
 });
 
 const alertsLine = (visible) => ({
@@ -220,36 +253,105 @@ function AlertPopup({ p }) {
   );
 }
 
+function RiskPredictionPopup({ p }) {
+  const scoreClass =
+    p.score >= 80 ? 'mp-danger'
+    : p.score >= 60 ? 'mp-unhealthy'
+    : p.score >= 40 ? 'mp-warning'
+    : 'mp-moderate';
+
+  const layerCfg = PREDICTION_LAYERS?.find?.(l => l.riskType === p.risk_type);
+  const label = layerCfg?.label ?? p.risk_type;
+
+  return (
+    <div className="mp-body">
+      <div className="mp-title">{label}</div>
+      <div className="mp-sub">{p.county_name}{p.state ? `, ${p.state}` : ''}</div>
+      <div className="mp-row">
+        <span className="mp-label">Risk Score</span>
+        <span className={`mp-value mp-aqi ${scoreClass}`}>{p.score}/100</span>
+      </div>
+      <div className="mp-row">
+        <span className="mp-label">Confidence</span>
+        <span className="mp-value">{p.confidence}%</span>
+      </div>
+      {p.factors && typeof p.factors === 'object' && (
+        <div className="mp-factors">
+          {Object.entries(p.factors).map(([k, v]) => (
+            <div key={k} className="mp-row">
+              <span className="mp-label mp-factor-key">{k.replace(/_/g, ' ')}</span>
+              <span className="mp-value mp-small">{typeof v === 'number' ? v.toFixed(2) : v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mp-row">
+        <span className="mp-label">Computed</span>
+        <span className="mp-value mp-small">{fmtDate(p.computed_at)}</span>
+      </div>
+      <div className="mp-speculative-note">⚠ Speculative — POC model</div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
-const INTERACTIVE_LAYERS = ['deforestation-fill', 'aq-circles', 'alerts-fill'];
+// All layer IDs that respond to click/hover events
+const INTERACTIVE_LAYERS = [
+  'deforestation-fill', 'aq-circles', 'alerts-fill',
+  'aq-risk-circles', 'sw-risk-circles',
+  'hur-risk-circles', 'wf-risk-circles', 'heat-risk-circles', 'tor-risk-circles',
+];
+
+// Prediction layer config — one entry per event type
+// label: exact display text shown in toggles and legend
+// color: single accent color for the swatch / legend dot
+const PREDICTION_LAYERS = [
+  { key: 'aqRisk',   riskType: 'air_quality',   layerId: 'aq-risk-circles',   sourceId: 'aq-risk',   label: 'Prospective Increased Possibility of Air Quality Issues', color: '#22d3ee', emoji: '🌫️' },
+  { key: 'swRisk',   riskType: 'severe_weather', layerId: 'sw-risk-circles',   sourceId: 'sw-risk',   label: 'Prospective Increased Possibility of Severe Weather',       color: '#818cf8', emoji: '⛈️' },
+  { key: 'hurRisk',  riskType: 'hurricane',      layerId: 'hur-risk-circles',  sourceId: 'hur-risk',  label: 'Prospective Increased Possibility of Hurricane',            color: '#38bdf8', emoji: '🌀' },
+  { key: 'wfRisk',   riskType: 'wildfire',       layerId: 'wf-risk-circles',   sourceId: 'wf-risk',   label: 'Prospective Increased Possibility of Wildfire',             color: '#fb923c', emoji: '🔥' },
+  { key: 'heatRisk', riskType: 'heat_wave',      layerId: 'heat-risk-circles', sourceId: 'heat-risk', label: 'Prospective Increased Possibility of Heat Wave',            color: '#fbbf24', emoji: '🌡️' },
+  { key: 'torRisk',  riskType: 'tornado',        layerId: 'tor-risk-circles',  sourceId: 'tor-risk',  label: 'Prospective Increased Possibility of Tornado',             color: '#a78bfa', emoji: '🌪️' },
+];
 
 export const MapViewer = () => {
   const [choroplethGeo, setChoroplethGeo] = useState(null);
   const [aqGeo, setAqGeo]               = useState(null);
   const [alertsGeo, setAlertsGeo]        = useState(null);
+  // Prediction layer data: keyed by PREDICTION_LAYERS[].key
+  const [predGeo, setPredGeo]            = useState({});
   const [loading, setLoading]            = useState(true);
   const [loadError, setLoadError]        = useState(null);
 
-  const [showAQ, setShowAQ]           = useState(true);
-  const [showAlerts, setShowAlerts]   = useState(true);
+  const [showDeforestation, setShowDeforestation] = useState(true);
+  const [showAQ, setShowAQ]                       = useState(true);
+  const [showAlerts, setShowAlerts]               = useState(true);
+  // One boolean toggle per prediction layer, keyed by PREDICTION_LAYERS[].key
+  const [showPred, setShowPred] = useState(
+    Object.fromEntries(PREDICTION_LAYERS.map(l => [l.key, true]))
+  );
 
   const [cursor, setCursor]      = useState('');
-  const [popupInfo, setPopupInfo] = useState(null); // { lngLat, type, props }
+  const [popupInfo, setPopupInfo] = useState(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [choropleth, aq, alerts] = await Promise.all([
+        const [choropleth, aq, alerts, batchResult] = await Promise.all([
           fetchChoroplethCounties(),
           fetchAirQualityGeoJSON(),
           fetchAlertsGeoJSON(),
+          fetchRiskPredictionsBatch(40),  // single request — all 6 types, Moderate+ only
         ]);
         setChoroplethGeo(choropleth);
         setAqGeo(aq);
         setAlertsGeo(alerts);
+        const geoByKey = {};
+        PREDICTION_LAYERS.forEach(l => { geoByKey[l.key] = batchResult.layers?.[l.riskType] ?? null; });
+        setPredGeo(geoByKey);
       } catch (err) {
         console.error('Map data load failed', err);
         setLoadError('Failed to load map data. Is the API running?');
@@ -262,6 +364,11 @@ export const MapViewer = () => {
 
   const onMouseEnter = useCallback(() => setCursor('pointer'), []);
   const onMouseLeave = useCallback(() => setCursor(''), []);
+
+  const INTERACTIVE_LAYERS_COMPUTED = [
+    'deforestation-fill', 'aq-circles', 'alerts-fill',
+    'aq-risk-circles', 'sw-risk-circles',
+  ];
 
   const onClick = useCallback((event) => {
     const feature = event.features?.[0];
@@ -276,6 +383,8 @@ export const MapViewer = () => {
       setPopupInfo({ lngLat, type: 'aq', props: p });
     } else if (layer.id === 'alerts-fill') {
       setPopupInfo({ lngLat, type: 'alert', props: p });
+    } else if (layer.id === 'aq-risk-circles' || layer.id === 'sw-risk-circles') {
+      setPopupInfo({ lngLat, type: 'risk', props: p });
     }
   }, []);
 
@@ -299,11 +408,11 @@ export const MapViewer = () => {
           onClick={onClick}
           style={{ width: '100%', height: '100%' }}
         >
-          {/* ── Deforestation choropleth (always on) ── */}
+          {/* ── Deforestation choropleth (toggleable) ── */}
           {choroplethGeo && (
             <Source id="county-loss" type="geojson" data={choroplethGeo}>
-              <Layer {...deforestationFill} />
-              <Layer {...deforestationLine} />
+              <Layer {...deforestationFill(showDeforestation)} />
+              <Layer {...deforestationLine(showDeforestation)} />
             </Source>
           )}
 
@@ -321,6 +430,17 @@ export const MapViewer = () => {
               <Layer {...alertsLine(showAlerts)} />
             </Source>
           )}
+
+          {/* ── ML prediction layers (one per event type) ── */}
+          {PREDICTION_LAYERS.map(l => {
+            const geo = predGeo[l.key];
+            if (!geo?.features?.length) return null;
+            return (
+              <Source key={l.sourceId} id={l.sourceId} type="geojson" data={geo}>
+                <Layer {...riskLayer(l.layerId, l.sourceId, showPred[l.key])} />
+              </Source>
+            );
+          })}
 
           {/* ── Rich popup ── */}
           {popupInfo && (
@@ -342,6 +462,9 @@ export const MapViewer = () => {
               {popupInfo.type === 'alert' && (
                 <AlertPopup p={popupInfo.props} />
               )}
+              {popupInfo.type === 'risk' && (
+                <RiskPredictionPopup p={popupInfo.props} />
+              )}
             </Popup>
           )}
 
@@ -349,11 +472,15 @@ export const MapViewer = () => {
           <div className="map-layer-controls">
             <p className="layer-controls-title">Layers</p>
 
-            <div className="layer-item layer-item--locked">
+            <label className={`layer-item ${showDeforestation ? 'layer-item--active' : ''}`}>
+              <input
+                type="checkbox"
+                checked={showDeforestation}
+                onChange={(e) => setShowDeforestation(e.target.checked)}
+              />
               <span className="layer-swatch layer-swatch--deforestation" />
               <span className="layer-label">Deforestation</span>
-              <span className="layer-lock" title="Always visible">🌿</span>
-            </div>
+            </label>
 
             <label className={`layer-item ${showAQ ? 'layer-item--active' : ''}`}>
               <input
@@ -374,6 +501,28 @@ export const MapViewer = () => {
               <span className="layer-swatch layer-swatch--alerts" />
               <span className="layer-label">Severe Weather</span>
             </label>
+
+            <p className="layer-controls-section">⚡ Prospective Risk</p>
+            {PREDICTION_LAYERS.map(l => {
+              const geo = predGeo[l.key];
+              const ready = geo?.data_ready !== false && (geo?.features?.length ?? 0) > 0;
+              return (
+                <label
+                  key={l.key}
+                  className={`layer-item layer-item--prediction ${showPred[l.key] && ready ? 'layer-item--active' : ''} ${!ready ? 'layer-item--disabled' : ''}`}
+                  title={!ready ? 'Prediction data not yet available — task runs daily at 06:30 UTC' : l.label}
+                >
+                  <input
+                    type="checkbox"
+                    checked={showPred[l.key]}
+                    disabled={!ready}
+                    onChange={(e) => setShowPred(prev => ({ ...prev, [l.key]: e.target.checked }))}
+                  />
+                  <span className="layer-swatch" style={{ background: l.color }} />
+                  <span className="layer-label">{l.emoji} {l.label}</span>
+                </label>
+              );
+            })}
           </div>
 
           {/* ── Legend ── */}
@@ -406,14 +555,47 @@ export const MapViewer = () => {
                 </div>
               </>
             )}
+
+            {PREDICTION_LAYERS.some(l => showPred[l.key] && (predGeo[l.key]?.features?.length ?? 0) > 0) && (
+              <>
+                <p className="legend-title legend-title--sep">⚡ Prospective Risk Score</p>
+                <p className="legend-subtitle">Showing Moderate and above</p>
+                <div className="legend-scale">
+                  <div className="legend-row">
+                    <span className="legend-dot" style={{ background: '#facc15' }} />
+                    Moderate (40–59)
+                  </div>
+                  <div className="legend-row">
+                    <span className="legend-dot" style={{ background: '#f97316' }} />
+                    Elevated (60–79)
+                  </div>
+                  <div className="legend-row">
+                    <span className="legend-dot" style={{ background: '#ef4444' }} />
+                    <strong>High (80+)</strong>
+                  </div>
+                </div>
+                <div className="legend-event-list">
+                  {PREDICTION_LAYERS.filter(l => showPred[l.key] && (predGeo[l.key]?.features?.length ?? 0) > 0).map(l => (
+                    <div key={l.key} className="legend-row legend-row--event">
+                      <span className="legend-dot" style={{ background: l.color }} />
+                      <span style={{ fontSize: '0.65rem', opacity: 0.85 }}>{l.emoji} {l.label}</span>
+                      <span className="legend-count">{predGeo[l.key]?.features?.length}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="legend-speculative-badge">⚠ Speculative — POC model</div>
+              </>
+            )}
           </div>
 
           {/* ── Stats bar ── */}
           <div className="map-stats">
-            <span className="stat-item">
-              <span className="stat-dot stat-dot--green" />
-              {choroplethGeo?.count ?? '—'} counties
-            </span>
+            {showDeforestation && (
+              <span className="stat-item">
+                <span className="stat-dot stat-dot--green" />
+                {choroplethGeo?.count ?? '—'} counties
+              </span>
+            )}
             {showAQ && (
               <span className="stat-item">
                 <span className="stat-dot stat-dot--yellow" />
@@ -426,6 +608,12 @@ export const MapViewer = () => {
                 {alertsGeo?.features?.length ?? 0} active alerts
               </span>
             )}
+            {PREDICTION_LAYERS.filter(l => showPred[l.key] && (predGeo[l.key]?.features?.length ?? 0) > 0).map(l => (
+              <span key={l.key} className="stat-item">
+                <span className="stat-dot" style={{ background: l.color }} />
+                {predGeo[l.key]?.features?.length ?? 0} {l.emoji}
+              </span>
+            ))}
           </div>
 
           {loadError && (

@@ -17,8 +17,8 @@ _MIN_AQI = 51
 
 def _parse_observed_at(date_str, hour_int):
     """
-    Combine AirNow 'DateObserved' ('YYYY-MM-DD') and 'HourObserved' (0-23 UTC)
-    into a timezone-aware datetime.
+    Combine 'DateObserved' (YYYY-MM-DD, already normalised to UTC by the
+    client) and 'HourObserved' (0-23 UTC) into a timezone-aware datetime.
     """
     try:
         naive = datetime.strptime(date_str.strip(), "%Y-%m-%d").replace(
@@ -34,18 +34,19 @@ def _parse_observed_at(date_str, hour_int):
 def ingest_air_quality_observations(self):
     """
     Hourly Celery task: fetch current primary AQI readings for all US
-    reporting areas from the EPA AirNow API and upsert
-    AirQualityObservation records.
+    reporting areas from the AirNow public hourly flat-file feed and
+    upsert AirQualityObservation records.
+
+    Data source:
+        https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/today/reportingarea.dat
+    (public, no API key required, updated every hour)
 
     Strategy:
-      - Fetches one record per (reporting_area, pollutant) from AirNow.
-      - Skips AQI < 51 ("Good") to keep the table focused on bad air.
-      - Selects the highest-AQI pollutant as the *primary* record when an
-        area reports multiple pollutants above the threshold.
-      - Resolves State via state abbreviation code.
-      - Resolves County via a PostGIS ST_Contains point-in-polygon query
-        (lat/lon from AirNow) — falls back to NULL for offshore / boundary
-        monitoring stations.
+      - Fetches one record per reporting area (isPrimary=Y — dominant pollutant).
+      - Skips AQI < 51 ("Good") to keep the table focused on actionable readings.
+      - Resolves State via 2-char abbreviation.
+      - Resolves County via PostGIS ST_Contains point-in-polygon (lat/lon
+        included in the flat-file) — falls back to NULL for offshore stations.
       - Upserts keyed on (reporting_area, observed_at, pollutant).
 
     Returns:
@@ -57,14 +58,10 @@ def ingest_air_quality_observations(self):
 
     client = AirNowClient()
 
-    if not client.api_key:
-        logger.warning("AIRNOW_API_KEY not set — skipping AQ ingestion.")
-        return {"upserted": 0, "skipped": 0, "total_fetched": 0}
-
     try:
         raw_obs = client.get_current_observations()
     except Exception as exc:
-        logger.error(f"AirNow fetch failed: {exc}", exc_info=True)
+        logger.error(f"AirNow flat-file fetch failed: {exc}", exc_info=True)
         raise self.retry(exc=exc, countdown=120)
 
     if not raw_obs:
@@ -124,13 +121,12 @@ def ingest_air_quality_observations(self):
                 state_cache[state_code] = state
 
         # Resolve County FK via PostGIS ST_Contains (point-in-polygon).
-        # Lat/lon may be None if the endpoint doesn't return coordinates.
+        # Lat/lon from the flat-file — falls back to None for offshore stations.
         county = None
-        point = None
         if lat is not None and lon is not None:
             from django.contrib.gis.geos import Point
 
-            point = Point(lon, lat, srid=4326)
+            point = Point(float(lon), float(lat), srid=4326)
             county = County.objects.filter(geometry__contains=point).select_related("state").first()
 
         try:
@@ -144,9 +140,8 @@ def ingest_air_quality_observations(self):
                         "county": county,
                         "latitude": lat,
                         "longitude": lon,
-                        # Keep PostGIS PointField in sync with lat/lon so the
-                        # AQ layer supports ST_DWithin / bbox spatial queries.
-                        "location": point if (lat is not None and lon is not None) else None,
+                        # location PointField is derived automatically by
+                        # AirQualityObservation.save() from latitude/longitude.
                         "aqi": aqi_val,
                         "aqi_category": category_name,
                     },

@@ -1,4 +1,4 @@
-"""Tornado risk predictor — Phase 1 (rule-based) and Phase 2 (XGBoost)."""
+"""Wildfire risk predictor — Phase 1 (rule-based) and Phase 2 (XGBoost)."""
 
 import logging
 
@@ -10,29 +10,30 @@ from .base import RiskPredictor
 logger = logging.getLogger(__name__)
 
 FEATURE_COLS = [
-    "tor_historical_count",
-    "tor_recent_count",
-    "tor_deaths",
-    "tor_max_ef_score",
-    "tor_alert_count",
-    "tor_extreme_alert_count",
-    "tor_days_since_last_alert",
-    "tor_alley_proximity",
+    "wf_historical_count",
+    "wf_recent_count",
+    "wf_alert_count",
+    "wf_extreme_alert_count",
+    "wf_days_since_last_alert",
+    "wf_pm25_max_aqi",
+    "wf_pm25_smoke_days",
+    "wf_western_proximity",
+    "wf_season_factor",
 ]
 
 CONF_RULE_BASED = 38.0
 CONF_XGBOOST = 70.0
 
 
-class TornadoPredictor(RiskPredictor):
-    """Prospective Increased Possibility of Tornado predictor."""
+class WildfirePredictor(RiskPredictor):
+    """Prospective Increased Possibility of Wildfire predictor."""
 
     def __init__(self, model_version=None):
         super().__init__(model_version)
         self.model = xgb.XGBClassifier(
             n_estimators=100,
-            learning_rate=0.05,
-            max_depth=6,
+            learning_rate=0.1,
+            max_depth=5,
             objective="binary:logistic",
             eval_metric="auc",
             verbosity=0,
@@ -42,7 +43,7 @@ class TornadoPredictor(RiskPredictor):
     def train(self, X_train: pd.DataFrame, y_train):
         self.model.fit(X_train, y_train, verbose=False)
         self._trained = True
-        logger.info(f"TornadoPredictor trained on {len(y_train)} samples.")
+        logger.info(f"WildfirePredictor trained on {len(y_train)} samples.")
 
     def predict(self, X: pd.DataFrame):
         return self.model.predict_proba(X)[:, 1]
@@ -55,31 +56,43 @@ class TornadoPredictor(RiskPredictor):
 
     @staticmethod
     def rule_based_score(features: dict) -> tuple:
-        hist = float(features.get("tor_historical_count", 0))
-        recent = float(features.get("tor_recent_count", 0))
-        deaths = float(features.get("tor_deaths", 0))
-        ef = float(features.get("tor_max_ef_score", 0))
-        alerts = float(features.get("tor_extreme_alert_count", 0))
-        days = float(features.get("tor_days_since_last_alert", 90))
-        alley = float(features.get("tor_alley_proximity", 0))
+        hist = float(features.get("wf_historical_count", 0))
+        recent = float(features.get("wf_recent_count", 0))
+        alerts = float(features.get("wf_extreme_alert_count", 0))
+        days = float(features.get("wf_days_since_last_alert", 90))
+        pm25_max = float(features.get("wf_pm25_max_aqi", 0))
+        smoke_days = float(features.get("wf_pm25_smoke_days", 0))
+        western = float(features.get("wf_western_proximity", 0))
+        season = float(features.get("wf_season_factor", 0))
 
-        hist_score = min(hist / 100, 1.0) * 25
-        recent_score = min(recent / 10, 1.0) * 30
-        ef_score = (ef / 5.0) * 20  # EF0-EF5 → 0-20
+        hist_score = min(hist / 30, 1.0) * 20
+        recent_score = min(recent / 5, 1.0) * 20
         alert_score = min(alerts / 3, 1.0) * 15
         recency = max(0.0, (90 - days) / 90) * 5
-        alley_bonus = alley * 5
+        smoke_score = min(pm25_max / 500, 1.0) * 15 + min(smoke_days / 10, 1.0) * 10
+        geo_bonus = western * 10
+        season_bonus = season * 5
 
         score = round(
-            min(hist_score + recent_score + ef_score + alert_score + recency + alley_bonus, 100.0),
+            min(
+                hist_score
+                + recent_score
+                + alert_score
+                + recency
+                + smoke_score
+                + geo_bonus
+                + season_bonus,
+                100.0,
+            ),
             2,
         )
         return score, {
             "historical": round(hist_score, 2),
             "recent_activity": round(recent_score, 2),
-            "ef_rating": round(ef_score, 2),
-            "active_alerts": round(alert_score, 2),
-            "tornado_alley": round(alley_bonus, 2),
+            "fire_weather_alerts": round(alert_score, 2),
+            "pm25_smoke_proxy": round(smoke_score, 2),
+            "western_us": round(geo_bonus, 2),
+            "fire_season": round(season_bonus, 2),
         }
 
     def score_county(self, features: dict) -> tuple:
