@@ -67,8 +67,12 @@ const AccordionCard = ({ id, icon, title, children }) => {
         aria-labelledby={`accordion-btn-${id}`}
         className={`accordion-body ${open ? 'is-open' : ''}`}
       >
-        <div className="card-content">
-          {children}
+        {/* Inner wrapper carries the padding — keeps the grid child itself
+            padding-free so grid-template-rows: 0fr clips to true 0px */}
+        <div className="accordion-body-inner">
+          <div className="card-content">
+            {children}
+          </div>
         </div>
       </div>
     </Card>
@@ -91,7 +95,7 @@ export const Dashboard = () => {
         const [alertsData, lossResponse, aqResponse] = await Promise.all([
           fetchActiveAlerts(),
           fetchDeforestationLoss(),
-          fetchAirQuality(5),
+          fetchAirQuality(8),
         ]);
 
         const featureCollection = alertsData.results || {};
@@ -162,17 +166,33 @@ export const Dashboard = () => {
           {aqData.length > 0 ? (
             <ul className="alert-list">
               {aqData.slice(0, 5).map(obs => {
-                const { label, variant } = aqiMeta(obs.aqi);
+                const { variant } = aqiMeta(obs.aqi);
+                // Format observed_at as "HH:MM" local time for a freshness hint
+                const observedTime = obs.observed_at
+                  ? new Date(obs.observed_at).toLocaleTimeString([], {
+                      hour: '2-digit', minute: '2-digit',
+                    })
+                  : null;
+
                 return (
                   <li key={obs.id} className="alert-item">
                     <div className="alert-meta">
-                      <span className="alert-area">{obs.city}, {obs.state}</span>
+                      <div className="alert-area-block">
+                        <span className="alert-area">
+                          {obs.reporting_area}
+                        </span>
+                        <span className="alert-subarea">
+                          {obs.state_abbreviation || obs.state_name}
+                          {obs.county_name ? ` · ${obs.county_name}` : ''}
+                          {observedTime ? ` · ${observedTime}` : ''}
+                        </span>
+                      </div>
                       <div className="alert-badges">
                         <Badge variant={variant}>AQI {obs.aqi}</Badge>
                         <Badge variant="info">{obs.pollutant}</Badge>
                       </div>
                     </div>
-                    <p className="alert-event">{label}</p>
+                    <p className="alert-event">{obs.aqi_category}</p>
                   </li>
                 );
               })}

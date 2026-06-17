@@ -121,13 +121,12 @@ def ingest_air_quality_observations(self):
                 state_cache[state_code] = state
 
         # Resolve County FK via PostGIS ST_Contains (point-in-polygon).
-        # Lat/lon may be None if the endpoint doesn't return coordinates.
+        # Lat/lon from the flat-file — falls back to None for offshore stations.
         county = None
-        point = None
         if lat is not None and lon is not None:
             from django.contrib.gis.geos import Point
 
-            point = Point(lon, lat, srid=4326)
+            point = Point(float(lon), float(lat), srid=4326)
             county = County.objects.filter(geometry__contains=point).select_related("state").first()
 
         try:
@@ -141,9 +140,8 @@ def ingest_air_quality_observations(self):
                         "county": county,
                         "latitude": lat,
                         "longitude": lon,
-                        # Keep PostGIS PointField in sync with lat/lon so the
-                        # AQ layer supports ST_DWithin / bbox spatial queries.
-                        "location": point if (lat is not None and lon is not None) else None,
+                        # location PointField is derived automatically by
+                        # AirQualityObservation.save() from latitude/longitude.
                         "aqi": aqi_val,
                         "aqi_category": category_name,
                     },

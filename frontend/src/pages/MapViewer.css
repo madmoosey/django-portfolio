@@ -385,3 +385,124 @@
   text-align: center;
   backdrop-filter: blur(10px);
 }
+
+/* =============================================================================
+   Prediction layer section header
+   ============================================================================= */
+
+.layer-controls-section {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(251, 191, 36, 0.65);
+  margin: 0.75rem 0 0.4rem 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Prediction toggles — compact font, wrap long labels */
+.layer-item--prediction {
+  align-items: flex-start;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.layer-item--prediction .layer-swatch {
+  margin-top: 2px;
+  border-radius: 50%;
+}
+
+.layer-item--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.layer-item--disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
+/* Make the controls panel scrollable when many layers are visible */
+.map-layer-controls {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+/* =============================================================================
+   Legend — event type rows and speculative badge
+   ============================================================================= */
+
+.legend-subtitle {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin: -0.15rem 0 0.35rem;
+  letter-spacing: 0.03em;
+}
+
+.legend-event-list {
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.legend-row--event {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.legend-row--event .legend-dot {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.legend-count {
+  margin-left: auto;
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.45);
+  background: rgba(255,255,255,0.07);
+  padding: 0 0.3rem;
+  border-radius: 3px;
+}
+
+.legend-speculative-badge {
+  margin-top: 0.6rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 4px;
+  font-size: 0.6rem;
+  color: rgba(251, 191, 36, 0.8);
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+
+/* =============================================================================
+   Popup — speculative note and factor list
+   ============================================================================= */
+
+.mp-speculative-note {
+  margin-top: 0.6rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 4px;
+  font-size: 0.65rem;
+  color: rgba(251, 191, 36, 0.8);
+  text-align: center;
+}
+
+.mp-factors {
+  margin-top: 0.25rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 0.25rem;
+}
+
+.mp-factor-key {
+  font-size: 0.68rem !important;
+  text-transform: capitalize;
+}

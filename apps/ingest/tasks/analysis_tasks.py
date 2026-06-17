@@ -145,3 +145,223 @@ def predict_county_risk_scores(self, date_ref=None, risk_types=None):
         f"{len(targets) - len(failed)}/{len(targets)} risk types succeeded."
     )
     return results
+
+
+# ---------------------------------------------------------------------------
+# Task 3 – Environmental risk predictions (air quality + severe weather)
+# ---------------------------------------------------------------------------
+
+
+@shared_task(bind=True, max_retries=2)
+def predict_environmental_risks(self, date_ref=None):
+    """
+    Daily Celery task: score all US counties for air quality risk and severe
+    weather risk using live AQ observations and NWS alerts.
+
+    Phase detection (automatic):
+      • Phase 1 — rule-based scoring: runs immediately with any data.
+      • Phase 2 — XGBoost: activates once ≥ 30 days of FeatureSnapshot
+        history exists. Labels are derived self-supervised (did the county
+        have a bad event 1-7 days after the snapshot?).
+
+    FeatureSnapshots are saved daily so Phase 2 activates automatically
+    after 30 daily runs.
+
+    Returns:
+        dict: {phase, aq_saved, sw_saved, date_ref}
+    """
+    from datetime import date as _date
+    from datetime import timedelta
+
+    import pandas as pd
+
+    from apps.analysis.features.air_quality_features import AirQualityFeatureExtractor
+    from apps.analysis.features.heat_wave_features import HeatWaveFeatureExtractor
+    from apps.analysis.features.hurricane_features import HurricaneFeatureExtractor
+    from apps.analysis.features.severe_weather_features import SevereWeatherFeatureExtractor
+    from apps.analysis.features.tornado_features import TornadoFeatureExtractor
+    from apps.analysis.features.wildfire_features import WildfireFeatureExtractor
+    from apps.analysis.ml.air_quality_predictor import FEATURE_COLS as AQ_COLS
+    from apps.analysis.ml.air_quality_predictor import AirQualityPredictor
+    from apps.analysis.ml.heat_wave import FEATURE_COLS as HEAT_COLS
+    from apps.analysis.ml.heat_wave import HeatWavePredictor
+    from apps.analysis.ml.hurricane import FEATURE_COLS as HUR_COLS
+    from apps.analysis.ml.hurricane import HurricanePredictor
+    from apps.analysis.ml.severe_weather_predictor import FEATURE_COLS as SW_COLS
+    from apps.analysis.ml.severe_weather_predictor import SevereWeatherPredictor
+    from apps.analysis.ml.tornado import FEATURE_COLS as TOR_COLS
+    from apps.analysis.ml.tornado import TornadoPredictor
+    from apps.analysis.ml.wildfire_predictor import FEATURE_COLS as WF_COLS
+    from apps.analysis.ml.wildfire_predictor import WildfirePredictor
+    from apps.analysis.models import CountyRiskScore, FeatureSnapshot
+    from apps.geodata.models import County
+
+    date_ref_obj = _date.fromisoformat(date_ref) if date_ref else timezone.now().date()
+    logger.info(f"[predict_environmental_risks] Starting — date_ref={date_ref_obj}")
+
+    counties = list(County.objects.select_related("state").filter(state__isnull=False))
+
+    # ── Feature extraction ────────────────────────────────────────────────
+    aq_extractor = AirQualityFeatureExtractor()
+    sw_extractor = SevereWeatherFeatureExtractor()
+    hur_extractor = HurricaneFeatureExtractor()
+    tor_extractor = TornadoFeatureExtractor()
+    heat_extractor = HeatWaveFeatureExtractor()
+    wf_extractor = WildfireFeatureExtractor()
+
+    county_features: dict = {}
+    for county in counties:
+        aq_feats = aq_extractor.extract(county, date_ref_obj)
+        sw_feats = sw_extractor.extract(county, date_ref_obj)
+        hur_feats = hur_extractor.extract(county, date_ref_obj)
+        tor_feats = tor_extractor.extract(county, date_ref_obj)
+        heat_feats = heat_extractor.extract(county, date_ref_obj)
+        wf_feats = wf_extractor.extract(county, date_ref_obj)
+        combined = {**aq_feats, **sw_feats, **hur_feats, **tor_feats, **heat_feats, **wf_feats}
+        county_features[county.fips_code] = {"_county": county, **combined}
+
+        # Persist daily snapshot so history accumulates for Phase 2 training
+        FeatureSnapshot.objects.update_or_create(
+            county=county,
+            snapshot_date=date_ref_obj,
+            defaults={"features": combined},
+        )
+
+    logger.info(f"Features extracted for {len(county_features)} counties.")
+
+    # ── Phase detection: >= 30 days of snapshot history? ─────────────────
+    oldest = (
+        FeatureSnapshot.objects.order_by("snapshot_date")
+        .values_list("snapshot_date", flat=True)
+        .first()
+    )
+    has_30_days = oldest is not None and (date_ref_obj - oldest).days >= 30
+
+    aq_pred = AirQualityPredictor()
+    sw_pred = SevereWeatherPredictor()
+    hur_pred = HurricanePredictor()
+    tor_pred = TornadoPredictor()
+    heat_pred = HeatWavePredictor()
+    wf_pred = WildfirePredictor()
+
+    if has_30_days:
+        logger.info("Phase 2: training XGBoost on historical snapshots.")
+        _train_predictor(aq_pred, AQ_COLS, "air_quality", date_ref_obj)
+        _train_predictor(sw_pred, SW_COLS, "severe_weather", date_ref_obj)
+        _train_predictor(hur_pred, HUR_COLS, "hurricane", date_ref_obj)
+        _train_predictor(tor_pred, TOR_COLS, "tornado", date_ref_obj)
+        _train_predictor(heat_pred, HEAT_COLS, "heat_wave", date_ref_obj)
+        _train_predictor(wf_pred, WF_COLS, "wildfire", date_ref_obj)
+
+    trained = [p._trained for p in [aq_pred, sw_pred, hur_pred, tor_pred, heat_pred, wf_pred]]
+    phase = "xgboost" if any(trained) else "rule_based"
+    logger.info(f"Active scoring phase: {phase}")
+
+    # ── Score and persist CountyRiskScore records ─────────────────────────
+    computed_at = timezone.now()
+    aq_saved = sw_saved = hur_saved = tor_saved = heat_saved = wf_saved = 0
+    window_start_aq = date_ref_obj - timedelta(days=30)
+    window_start_sw = date_ref_obj - timedelta(days=90)
+    window_start_evt = date_ref_obj - timedelta(days=365 * 10)
+
+    # Each (predictor, risk_type, window_start) tuple is scored independently
+    event_configs = [
+        (aq_pred, "air_quality", window_start_aq),
+        (sw_pred, "severe_weather", window_start_sw),
+        (hur_pred, "hurricane", window_start_evt),
+        (tor_pred, "tornado", window_start_evt),
+        (heat_pred, "heat_wave", window_start_evt),
+        (wf_pred, "wildfire", window_start_evt),
+    ]
+
+    saved_counts = {cfg[1]: 0 for cfg in event_configs}
+
+    for fips, feats in county_features.items():
+        county = feats["_county"]
+        for pred, risk_type, win_start in event_configs:
+            try:
+                score, conf, factors = pred.score_county(feats)
+                CountyRiskScore.objects.update_or_create(
+                    county=county,
+                    risk_type=risk_type,
+                    computed_at=computed_at,
+                    defaults={
+                        "score": score,
+                        "confidence": conf,
+                        "factors": factors,
+                        "data_window_start": win_start,
+                        "data_window_end": date_ref_obj,
+                    },
+                )
+                saved_counts[risk_type] += 1
+            except Exception as exc:
+                logger.error(f"{risk_type} scoring failed for {fips}: {exc}")
+
+    logger.info(f"[predict_environmental_risks] Done — phase={phase}, counts={saved_counts}")
+    return {"phase": phase, "saved": saved_counts, "date_ref": str(date_ref_obj)}
+
+
+def _train_predictor(predictor, feature_cols, risk_type, date_ref):
+    """Train predictor on historical FeatureSnapshot data with self-supervised labels."""
+    from datetime import timedelta
+
+    import pandas as pd
+
+    from apps.analysis.models import FeatureSnapshot
+
+    snapshots = FeatureSnapshot.objects.select_related("county").filter(
+        snapshot_date__lt=date_ref  # exclude today — no future labels yet
+    )
+
+    X_rows, y_labels = [], []
+    for snap in snapshots:
+        if not snap.features:
+            continue
+        label = _get_label(
+            snap.county,
+            risk_type,
+            snap.snapshot_date + timedelta(days=1),
+            snap.snapshot_date + timedelta(days=7),
+        )
+        if label is None:
+            continue
+        X_rows.append({col: float(snap.features.get(col, 0)) for col in feature_cols})
+        y_labels.append(label)
+
+    if not X_rows or len(set(y_labels)) < 2:
+        logger.info(
+            f"Skipping XGBoost training for {risk_type}: "
+            f"n={len(X_rows)}, distinct_classes={set(y_labels)}"
+        )
+        return
+
+    predictor.train(pd.DataFrame(X_rows), y_labels)
+
+
+def _get_label(county, risk_type, label_start, label_end):
+    """Return 1/0 if a bad event occurred in the label window, else None."""
+    if risk_type == "air_quality":
+        from apps.air_quality.models import AirQualityObservation
+
+        return int(
+            AirQualityObservation.objects.filter(
+                county=county,
+                observed_at__date__gte=label_start,
+                observed_at__date__lte=label_end,
+                aqi__gt=100,
+            ).exists()
+        )
+    elif risk_type == "severe_weather":
+        from apps.storms.models import ActiveAlert
+
+        if county.geometry is None:
+            return 0
+        return int(
+            ActiveAlert.objects.filter(
+                geometry__intersects=county.geometry,
+                effective__date__gte=label_start,
+                effective__date__lte=label_end,
+                severity__in=["Extreme", "Severe"],
+            ).exists()
+        )
+    return None
